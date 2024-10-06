@@ -1,0 +1,14 @@
+export { Audio } from "./audio";
+export { Chat, ChatType } from "./chat";
+export { ContactMessage } from "./contact";
+export { Document, DocumentThumbnail } from "./document";
+export { EventMessage, EventLocation } from "./event";
+export { Image } from "./image";
+export { LocationMessage } from "./location";
+export { MessageType as Message } from "./message";
+export { Poll } from "./poll";
+export { Sticker } from "./sticker";
+export { User } from "./user";
+export { Video } from "./video";
+export { VideoNote } from "./videoNote";
+export { Voice } from "./voice";

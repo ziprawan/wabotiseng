@@ -1,0 +1,36 @@
+{
+  "name": "bot_opc",
+  "main": "out/index.js",
+  "scripts": {
+    "start": "tsup && node dist/index.js",
+    "compile": "tsc",
+    "run": "node out/index.js"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "futoin-hkdf": "^1.5.3",
+    "nodemon": "^3.1.7",
+    "ts-node": "^10.9.2",
+    "tsup": "^8.3.0",
+    "tsx": "^4.19.1"
+  },
+  "peerDependencies": {
+    "typescript": "^5.6.2"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.19.1",
+    "@whiskeysockets/baileys": "^6.7.7",
+    "node-cache": "^5.1.2",
+    "prisma": "^5.19.1",
+    "qrcode-terminal": "^0.12.0",
+    "sharp": "^0.33.5"
+  },
+  "trustedDependencies": [
+    "@prisma/client",
+    "@prisma/engines",
+    "esbuild",
+    "prisma",
+    "protobufjs",
+    "sharp"
+  ]
+}

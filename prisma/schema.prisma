@@ -1,0 +1,213 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("MONGO_URL")
+}
+
+// Enums
+enum ParticipantRole {
+  MEMBER
+  ADMIN
+  SUPERADMIN
+}
+
+// Database models
+model Creds {
+  credsId String @id @default(auto()) @map("_id") @db.ObjectId
+
+  sessionName   String @unique
+  sessionString String
+
+  AppStateSyncKey     AppStateSyncKey[]
+  AppStateSyncVersion AppStateSyncVersion[]
+  PreKey              PreKey[]
+  SenderKey           SenderKey[]
+  SenderKeyMemory     SenderKeyMemory[]
+  Session             Session[]
+  Contacts            Contact[]
+  Groups              Group[]
+  Messages            Message[]
+}
+
+model AppStateSyncKey {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  name    String
+  content String
+
+  creds     Creds  @relation(fields: [credsName], references: [sessionName])
+  credsName String
+
+  @@unique([name, credsName])
+}
+
+model AppStateSyncVersion {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  name    String
+  content String
+
+  creds     Creds  @relation(fields: [credsName], references: [sessionName])
+  credsName String
+
+  @@unique([name, credsName])
+}
+
+model PreKey {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  name    String
+  content String
+
+  creds     Creds  @relation(fields: [credsName], references: [sessionName])
+  credsName String
+
+  @@unique([name, credsName])
+}
+
+model SenderKey {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  name    String
+  content String
+
+  creds     Creds  @relation(fields: [credsName], references: [sessionName])
+  credsName String
+
+  @@unique([name, credsName])
+}
+
+model SenderKeyMemory {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  name    String
+  content String
+
+  creds     Creds  @relation(fields: [credsName], references: [sessionName])
+  credsName String
+
+  @@unique([name, credsName])
+}
+
+model Session {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  name    String
+  content String
+
+  creds     Creds  @relation(fields: [credsName], references: [sessionName])
+  credsName String
+
+  @@unique([name, credsName])
+}
+
+// Main Bot Features
+model Contact {
+  remoteJid String @id @map("_id")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  name     String?
+  pushName String?
+
+  credsName String
+  creds     Creds     @relation(references: [sessionName], fields: [credsName])
+  messages  Message[]
+
+  @@unique([credsName, remoteJid])
+}
+
+model Participant {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  groupJid       String
+  participantJid String
+  role           ParticipantRole
+
+  credsName String
+
+  group Group @relation(references: [remoteJid, credsName], fields: [groupJid, credsName])
+
+  @@unique([credsName, groupJid, participantJid])
+}
+
+model Group {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Group metadata
+  remoteJid    String
+  owner        String
+  subject      String
+  subjectOwner String?
+  subjectTime  DateTime?
+  desc         String?
+  descOwner    String?
+  size         Int           @default(1)
+  creation     DateTime?
+  participants Participant[]
+
+  // Settings
+  announce          Boolean @default(false) // Only admin can send messages
+  restrict          Boolean @default(false) // Only admin can edit group
+  joinApprovalMode  Boolean @default(false) // Wait for admin approval to join
+  memberAddMode     Boolean @default(false) // Only admin can invite members
+  ephemeralDuration Int? // Disappearing mode interval in seconds
+
+  // misc.
+  isCommunity         Boolean @default(false)
+  isCommunityAnnounce Boolean @default(false)
+  linkedParent        String?
+
+  credsName String
+  creds     Creds  @relation(references: [sessionName], fields: [credsName])
+
+  settings GroupSettings?
+  messages Message[]
+
+  @@unique([credsName, remoteJid])
+}
+
+model GroupSettings {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  remoteJid       String
+  allowMentionAll Boolean @default(false)
+
+  credsName String
+
+  group Group @relation(fields: [id], references: [id])
+
+  @@unique([credsName, remoteJid])
+}
+
+model Message {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messageId String
+  remoteJid String
+  message   String
+
+  credsName String
+  creds     Creds  @relation(references: [sessionName], fields: [credsName])
+
+  group   Group?   @relation(fields: [remoteJid, credsName], references: [remoteJid, credsName])
+  contact Contact? @relation(fields: [remoteJid], references: [remoteJid])
+
+  @@unique([messageId, remoteJid, credsName])
+}
