@@ -20,6 +20,12 @@ enum ParticipantRole {
   SUPERADMIN
 }
 
+enum ViewOnceMediaType {
+  image
+  video
+  audio
+}
+
 // Database models
 model Creds {
   credsId String @id @default(auto()) @map("_id") @db.ObjectId
@@ -36,6 +42,7 @@ model Creds {
   Contacts            Contact[]
   Groups              Group[]
   Messages            Message[]
+  RequestViewOnce     RequestViewOnce[]
 }
 
 model AppStateSyncKey {
@@ -174,8 +181,9 @@ model Group {
   credsName String
   creds     Creds  @relation(references: [sessionName], fields: [credsName])
 
-  settings GroupSettings?
-  messages Message[]
+  settings         GroupSettings?
+  messages         Message[]
+  viewOnceRequests RequestViewOnce[]
 
   @@unique([credsName, remoteJid])
 }
@@ -208,6 +216,24 @@ model Message {
 
   group   Group?   @relation(fields: [remoteJid, credsName], references: [remoteJid, credsName])
   contact Contact? @relation(fields: [remoteJid], references: [remoteJid])
+
+  @@unique([messageId, remoteJid, credsName])
+}
+
+model RequestViewOnce {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  createdAt DateTime @default(now())
+
+  messageId   String
+  remoteJid   String
+  requestedBy String
+  accepted    Boolean @default(false)
+
+  credsName String
+  creds     Creds  @relation(references: [sessionName], fields: [credsName])
+
+  group Group? @relation(fields: [remoteJid, credsName], references: [remoteJid, credsName])
 
   @@unique([messageId, remoteJid, credsName])
 }

@@ -16,16 +16,20 @@ import {
 import { ContactMessage } from "@/types/whatsapp/contact";
 import { MessageHandlerType, MessageType } from "@/types/whatsapp/message";
 import { proto } from "@whiskeysockets/baileys";
-import { EventEmitter } from "node-cache";
 import { writeFileSync } from "node:fs";
 import { botDatabase } from "../database/client";
 import { writeErrorToFile } from "../error/write";
+import { ReactionClass } from "./reaction";
 
 export class Messages {
   constructor(
-    private client: Client,
+    client: Client,
     private message: proto.IWebMessageInfo
-  ) {}
+  ) {
+    this.client = client;
+  }
+
+  client: Client;
 
   get remoteJid(): string | null | undefined {
     return this.message.key.remoteJid;
@@ -37,6 +41,10 @@ export class Messages {
 
   get id(): string | null | undefined {
     return this.message.key.id;
+  }
+
+  get sessionName(): string {
+    return this.client.sessionName;
   }
 
   get chatType(): ChatType | null {
@@ -304,11 +312,11 @@ export class Messages {
     };
   }
 
-  get reaction(): string | undefined {
+  get reaction(): ReactionClass | undefined {
     const rct = this.message.message?.reactionMessage;
     if (!rct) return;
 
-    return rct.text ?? "";
+    return new ReactionClass(rct, this.client);
   }
 
   get text(): string {
@@ -341,6 +349,16 @@ export class Messages {
       // Maybe usefull for another things :D
       raw: this.raw,
     };
+  }
+
+  get viewOnceMessage(): Messages | undefined {
+    const viewOnceMsg =
+      this.message.message?.viewOnceMessage?.message ??
+      this.message.message?.viewOnceMessageV2?.message ??
+      this.message.message?.viewOnceMessageV2Extension?.message ??
+      undefined;
+
+    return new Messages(this.client, { key: this.msgKey, message: viewOnceMsg });
   }
 
   // Async utilities
@@ -442,8 +460,6 @@ export class Messages {
             createMany: {
               data: participants.map((part) => {
                 return {
-                  credsName: this.client.sessionName,
-                  groupJid: this.remoteJid as string,
                   participantJid: part.id,
                   role: part.admin === "admin" ? "ADMIN" : part.admin === "superadmin" ? "SUPERADMIN" : "MEMBER",
                 };
@@ -473,6 +489,24 @@ export class Messages {
     return false;
   }
 
+  /**
+   * Resolve the reply_to_message field from database
+   * @returns {Messages | null}
+   */
+  async resolveReplyToMessage(): Promise<Messages | null> {
+    if (!this.reply_to_message) return null;
+
+    const { id, chat } = this.reply_to_message;
+
+    if (!id) return null;
+
+    const message = await botDatabase.message.findUnique({
+      where: { messageId_remoteJid_credsName: { messageId: id, remoteJid: chat, credsName: this.client.sessionName } },
+    });
+
+    return message ? new Messages(this.client, JSON.parse(message.message)) : null;
+  }
+
   async saveMessage(opts: { dismissChat: boolean } = { dismissChat: false }): Promise<boolean> {
     if (!this.remoteJid || !this.id) {
       return false;
@@ -484,18 +518,34 @@ export class Messages {
 
     await botDatabase.message.upsert({
       create: {
-        credsName: this.remoteJid,
+        credsName: this.sessionName,
         messageId: this.id,
         remoteJid: this.remoteJid,
         message: JSON.stringify(this.message),
       },
       where: {
-        messageId_remoteJid_credsName: { credsName: this.remoteJid, messageId: this.id, remoteJid: this.remoteJid },
+        messageId_remoteJid_credsName: { credsName: this.sessionName, messageId: this.id, remoteJid: this.remoteJid },
       },
       update: { message: JSON.stringify(this.message) },
     });
 
     return true;
+  }
+
+  static async getMessage(client: Client, remoteJid: string, messageId: string): Promise<Messages | null> {
+    const message = await botDatabase.message.findUnique({
+      where: {
+        messageId_remoteJid_credsName: {
+          messageId,
+          remoteJid,
+          credsName: client.sessionName,
+        },
+      },
+    });
+
+    if (!message) return null;
+
+    return new Messages(client, JSON.parse(message.message));
   }
 
   async handle(handler: MessageHandlerType) {

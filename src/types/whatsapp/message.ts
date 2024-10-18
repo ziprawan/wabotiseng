@@ -1,3 +1,5 @@
+import { Messages } from "@/utils/classes/message";
+import { ReactionClass } from "@/utils/classes/reaction";
 import { proto } from "@whiskeysockets/baileys";
 import { WASocket } from "../socket";
 import { Audio } from "./audio";
@@ -11,7 +13,6 @@ import { Sticker } from "./sticker";
 import { Video } from "./video";
 import { VideoNote } from "./videoNote";
 import { Voice } from "./voice";
-import { Messages } from "@/utils/classes/message";
 
 export type MessageType = {
   id: string;
@@ -35,7 +36,7 @@ export type MessageType = {
   location?: LocationMessage;
   event?: EventMessage;
   poll?: Poll;
-  reaction?: string;
+  reaction?: ReactionClass;
 
   raw: proto.IWebMessageInfo;
 };
