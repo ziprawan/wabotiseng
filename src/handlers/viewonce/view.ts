@@ -24,9 +24,9 @@ export const viewOnceCommandHandler: CommandHandlerFunc = async ({ sock, msg }) 
 
   const request = await botDatabase.requestViewOnce.findUnique({
     where: {
-      messageId_remoteJid_credsName: {
+      messageId_chatId_credsName: {
         messageId: resolvedReply.id ?? "",
-        remoteJid: resolvedReply.remoteJid ?? "",
+        chatId: resolvedReply.remoteJid ?? "",
         credsName: msg.client.sessionName,
       },
     },
@@ -50,24 +50,24 @@ export const viewOnceCommandHandler: CommandHandlerFunc = async ({ sock, msg }) 
     return await sock.sendMessage(msg.chat, { text: "Failed to get message ID or chat ID!" }, { quoted: msg.raw });
   }
 
-  const code = Buffer.from(`viewonce:${resolvedReply.from}:${resolvedReply.remoteJid}:${resolvedReply.id}`).toString("base64url");
   const fromNumber = resolvedReply.from.split("@")[0];
 
-  await botDatabase.requestViewOnce.create({
-    data: {
-      messageId: resolvedReply.id,
-      remoteJid: resolvedReply.remoteJid,
-      credsName: msg.client.sessionName,
-      requestedBy: msg.from,
-    },
-  });
-
-  return await sock.sendMessage(
+  const sent = await sock.sendMessage(
     msg.chat,
     {
-      text: `Waiting for @${fromNumber} approval...\nReact this message with ✅ emoji to approve it\n\n${code}`,
+      text: `Waiting for @${fromNumber} to react this message with ✅`,
       mentions: [resolvedReply.from],
     },
     { quoted: msg.raw }
   );
+
+  await botDatabase.requestViewOnce.create({
+    data: {
+      messageId: resolvedReply.id,
+      confirmId: sent?.key.id ?? "",
+      chatId: resolvedReply.remoteJid,
+      credsName: msg.client.sessionName,
+      requestedBy: msg.from,
+    },
+  });
 };

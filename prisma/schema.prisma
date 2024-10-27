@@ -227,17 +227,19 @@ model RequestViewOnce {
 
   createdAt DateTime @default(now())
 
-  messageId   String
-  remoteJid   String
+  confirmId   String // Message ID of the confirmation message
+  messageId   String // Message ID of the view-once message
+  chatId      String
   requestedBy String
   accepted    Boolean @default(false)
 
   credsName String
   creds     Creds  @relation(references: [sessionName], fields: [credsName])
 
-  group Group? @relation(fields: [remoteJid, credsName], references: [remoteJid, credsName])
+  group Group? @relation(fields: [chatId, credsName], references: [remoteJid, credsName])
 
-  @@unique([messageId, remoteJid, credsName])
+  @@unique([confirmId, chatId, credsName])
+  @@unique([messageId, chatId, credsName])
 }
 
 // Edunex stuffs

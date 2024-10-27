@@ -22,19 +22,21 @@ export const viewOnceAcceptHandler: CommandHandlerFunc = async ({ sock, msg }) =
 
   if (!conversation) return;
 
-  const split = conversation.split("\n");
-  const viewCode = split[split.length - 1];
-  const decoded = Buffer.from(viewCode, "base64url").toString("utf-8");
-  const decodeSplit = decoded.split(":");
+  const request = await botDatabase.requestViewOnce.findUnique({
+    where: {
+      confirmId_chatId_credsName: {
+        confirmId: resolvedMsg.id ?? "",
+        chatId: msg.chat,
+        credsName: msg.sessionName,
+      },
+    },
+  });
 
-  // View code format should be look like this
-  // viewonce:<user_id>:<chat_id>:<message_id>
-  if (decodeSplit.length !== 4) return;
-  if (decodeSplit[0] !== "viewonce") return;
-  if (msg.from !== decodeSplit[1]) return;
-  if (msg.chat !== decodeSplit[2]) return;
+  if (!request) {
+    return await sock.sendMessage(msg.chat, { text: "Request not found!" }, { quoted: msg.raw });
+  }
 
-  const viewOnceMessage = (await Messages.getMessage(msg.client, decodeSplit[2], decodeSplit[3]))?.viewOnceMessage;
+  const viewOnceMessage = (await Messages.getMessage(msg.client, msg.chat, request.messageId))?.viewOnceMessage;
   if (!viewOnceMessage) {
     console.error(`Requested message is not a view once message!`);
     return;
@@ -46,22 +48,6 @@ export const viewOnceAcceptHandler: CommandHandlerFunc = async ({ sock, msg }) =
   }
 
   const mediaType = viewOnceMessage.audio ? "audio" : viewOnceMessage.video ? "video" : "image";
-
-  const request = await botDatabase.requestViewOnce.findUnique({
-    where: {
-      messageId_remoteJid_credsName: {
-        messageId: decodeSplit[3],
-        remoteJid: decodeSplit[2],
-        credsName: msg.client.sessionName,
-      },
-    },
-    select: { id: true, accepted: true },
-  });
-
-  if (!request) {
-    console.error(`Request not found!`);
-    return;
-  }
 
   if (request.accepted) return;
 
