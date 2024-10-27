@@ -4,6 +4,7 @@ import { Parser } from "@/utils/classes/parser";
 import { stickerCommandHandler } from "./sticker/create";
 import { viewOnceCommandHandler } from "./viewonce/view";
 import { viewOnceAcceptHandler } from "./viewonce/accepted";
+import { edunexHandler } from "./edunex";
 
 export async function mainHandler(sock: WASocket, msg: Messages) {
   const parser = new Parser([".", "/"], msg.text);
@@ -12,19 +13,25 @@ export async function mainHandler(sock: WASocket, msg: Messages) {
   // console.log("Received msg:", msg);
   console.log("==============================");
 
+  const ctx = { sock, msg, parser };
+
   if (parser.command === "ping") {
     await sock.sendMessage(msg.chat, { text: "Pong!" });
   }
 
   if (parser.command === "stk") {
-    await stickerCommandHandler({ sock, msg, parser });
+    await stickerCommandHandler(ctx);
   }
 
   if (parser.command === "vo") {
-    await viewOnceCommandHandler({ sock, msg, parser });
+    await viewOnceCommandHandler(ctx);
+  }
+
+  if (parser.command === "edunex") {
+    await edunexHandler(ctx);
   }
 
   if (msg.reaction) {
-    await viewOnceAcceptHandler({ sock, msg, parser });
+    await viewOnceAcceptHandler(ctx);
   }
 }

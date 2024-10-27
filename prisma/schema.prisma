@@ -43,6 +43,7 @@ model Creds {
   Groups              Group[]
   Messages            Message[]
   RequestViewOnce     RequestViewOnce[]
+  EdunexSettings      EdunexSettings[]
 }
 
 model AppStateSyncKey {
@@ -127,9 +128,10 @@ model Contact {
   name     String?
   pushName String?
 
-  credsName String
-  creds     Creds     @relation(references: [sessionName], fields: [credsName])
-  messages  Message[]
+  credsName      String
+  creds          Creds            @relation(references: [sessionName], fields: [credsName])
+  messages       Message[]
+  edunexSettings EdunexSettings[]
 
   @@unique([credsName, remoteJid])
 }
@@ -236,4 +238,41 @@ model RequestViewOnce {
   group Group? @relation(fields: [remoteJid, credsName], references: [remoteJid, credsName])
 
   @@unique([messageId, remoteJid, credsName])
+}
+
+// Edunex stuffs
+model EdunexSettings {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  userId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  token String
+
+  credsName String
+
+  creds       Creds               @relation(references: [sessionName], fields: [credsName])
+  user        Contact             @relation(fields: [userId], references: [remoteJid])
+  assignments EdunexAssignments[]
+
+  @@unique([userId, credsName])
+}
+
+model EdunexAssignments {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  title       String
+  description String
+  dueDate     DateTime
+  maxMarks    Int
+  weightage   Int
+
+  settingsId String @db.ObjectId
+
+  settings EdunexSettings @relation(fields: [settingsId], references: [id])
 }

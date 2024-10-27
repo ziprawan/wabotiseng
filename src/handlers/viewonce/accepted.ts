@@ -11,7 +11,7 @@ export const viewOnceAcceptHandler: CommandHandlerFunc = async ({ sock, msg }) =
   const resolvedMsg = await msg.reaction.resolveReactedMessage();
 
   if (!resolvedMsg) {
-    return await sock.sendMessage(msg.chat, { text: "Message not found." }, { quoted: msg.raw });
+    return;
   }
 
   if (msg.reaction.content !== "✅") return;

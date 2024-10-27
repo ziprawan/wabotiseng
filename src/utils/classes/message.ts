@@ -361,7 +361,7 @@ export class Messages {
     return new Messages(this.client, { key: this.msgKey, message: viewOnceMsg });
   }
 
-  // Async utilities
+  // Database utilities
 
   async getChatFromDatabase(): Promise<Chat | null> {
     if (!this.remoteJid) return null;
@@ -546,6 +546,15 @@ export class Messages {
     if (!message) return null;
 
     return new Messages(client, JSON.parse(message.message));
+  }
+
+  // Message utilities
+  async replyText(text: string, quotedMessage?: boolean): Promise<void> {
+    if (!this.client.socket) {
+      throw new Error("Socket isn't initialized yet!");
+    }
+
+    await this.client.socket.sendMessage(this.chat, { text }, { quoted: quotedMessage ? this.raw : undefined });
   }
 
   async handle(handler: MessageHandlerType) {

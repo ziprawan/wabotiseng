@@ -1,14 +1,9 @@
 import { CommandHandlerFunc } from "@/types/command/handler";
-import { Messages } from "@/utils/classes/message";
 import { botDatabase } from "@/utils/database/client";
 
 export const viewOnceCommandHandler: CommandHandlerFunc = async ({ sock, msg }) => {
   if (!msg.reply_to_message) {
-    return await sock.sendMessage(
-      msg.chat,
-      { text: "Please reply to a message that you want to view a view once message!" },
-      { quoted: msg.raw }
-    );
+    return await msg.replyText("Please reply to a message that you want to view a view once message!", true);
   }
 
   const resolvedReply = await msg.resolveReplyToMessage();
