@@ -66,7 +66,7 @@ export const viewOnceCommandHandler: CommandHandlerFunc = async ({ sock, msg }) 
       messageId: resolvedReply.id,
       confirmId: sent?.key.id ?? "",
       chatId: resolvedReply.remoteJid,
-      credsName: msg.client.sessionName,
+      credsName: msg.sessionName,
       requestedBy: msg.from,
     },
   });

@@ -33,17 +33,18 @@ model Creds {
   sessionName   String @unique
   sessionString String
 
-  AppStateSyncKey     AppStateSyncKey[]
-  AppStateSyncVersion AppStateSyncVersion[]
-  PreKey              PreKey[]
-  SenderKey           SenderKey[]
-  SenderKeyMemory     SenderKeyMemory[]
-  Session             Session[]
-  Contacts            Contact[]
-  Groups              Group[]
-  Messages            Message[]
-  RequestViewOnce     RequestViewOnce[]
-  EdunexSettings      EdunexSettings[]
+  AppStateSyncKey      AppStateSyncKey[]
+  AppStateSyncVersion  AppStateSyncVersion[]
+  PreKey               PreKey[]
+  SenderKey            SenderKey[]
+  SenderKeyMemory      SenderKeyMemory[]
+  Session              Session[]
+  Contacts             Contact[]
+  Groups               Group[]
+  Messages             Message[]
+  RequestViewOnce      RequestViewOnce[]
+  EdunexAccounts       EdunexAccount[]
+  RequestDeleteMessage RequestDeleteMessage[]
 }
 
 model AppStateSyncKey {
@@ -129,9 +130,9 @@ model Contact {
   pushName String?
 
   credsName      String
-  creds          Creds            @relation(references: [sessionName], fields: [credsName])
+  creds          Creds           @relation(references: [sessionName], fields: [credsName])
   messages       Message[]
-  edunexSettings EdunexSettings[]
+  edunexAccounts EdunexAccount[]
 
   @@unique([credsName, remoteJid])
 }
@@ -242,8 +243,28 @@ model RequestViewOnce {
   @@unique([messageId, chatId, credsName])
 }
 
+model RequestDeleteMessage {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  createdAt DateTime @default(now())
+
+  chatId      String
+  messageId   String
+  confirmId   String
+  requestedBy String
+  agrees      String[] @default([]) // List of participants who agrees
+  disagrees   String[] @default([]) // List of participants who disagrees
+  done        Boolean  @default(false)
+
+  credsName String
+  creds     Creds  @relation(references: [sessionName], fields: [credsName])
+
+  @@unique([confirmId, chatId, credsName])
+  @@unique([messageId, chatId, credsName])
+}
+
 // Edunex stuffs
-model EdunexSettings {
+model EdunexAccount {
   id String @id @default(auto()) @map("_id") @db.ObjectId
 
   userId String
@@ -255,11 +276,34 @@ model EdunexSettings {
 
   credsName String
 
-  creds       Creds               @relation(references: [sessionName], fields: [credsName])
-  user        Contact             @relation(fields: [userId], references: [remoteJid])
-  assignments EdunexAssignments[]
+  creds Creds   @relation(references: [sessionName], fields: [credsName])
+  user  Contact @relation(fields: [userId], references: [remoteJid])
+
+  courseMembers EdunexCourseMember[]
 
   @@unique([userId, credsName])
+}
+
+model EdunexCourseMember {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  courseId  String @db.ObjectId
+  accountId String @db.ObjectId
+
+  course  EdunexCourses @relation(fields: [courseId], references: [id])
+  account EdunexAccount @relation(fields: [accountId], references: [id])
+
+  @@unique([courseId, accountId])
+}
+
+model EdunexCourses {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  courseId  Int
+  updatedAt DateTime
+
+  assignments EdunexAssignments[]
+  members     EdunexCourseMember[]
 }
 
 model EdunexAssignments {
@@ -274,7 +318,7 @@ model EdunexAssignments {
   maxMarks    Int
   weightage   Int
 
-  settingsId String @db.ObjectId
+  courseId String @db.ObjectId
 
-  settings EdunexSettings @relation(fields: [settingsId], references: [id])
+  course EdunexCourses? @relation(fields: [courseId], references: [id])
 }

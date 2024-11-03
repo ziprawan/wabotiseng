@@ -1,23 +1,19 @@
+import { pola_pikir } from "@/stickers";
 import { CommandHandlerFunc } from "@/types/command/handler";
 import { IStickerMetadata } from "@/types/whatsapp/sticker";
 import { writeErrorToFile } from "@/utils/error/write";
 import { streamToBuffer } from "@/utils/stream/toBuffer";
-import { downloadEncryptedContent, getMediaKeys } from "@whiskeysockets/baileys";
-import Sharp from "sharp";
-import * as Emoji from "node-emoji";
-import { buildStickerExif } from "@/utils/whatsapp/stickers/buildExif";
-import { Categories } from "wa-sticker-formatter";
 import { createSticker } from "@/utils/whatsapp/stickers/createSticker";
+import { downloadEncryptedContent, getMediaKeys } from "@whiskeysockets/baileys";
+import * as Emoji from "node-emoji";
+import Sharp from "sharp";
+import { Categories } from "wa-sticker-formatter";
 
 export const stickerCommandHandler: CommandHandlerFunc = async ({ sock, msg, parser }) => {
   const imageMsg = msg.image ?? msg.reply_to_message?.image;
 
   if (!imageMsg) {
-    return await sock.sendMessage(
-      msg.chat,
-      { text: "Please send an image message or reply to image message!" },
-      { quoted: msg.raw }
-    );
+    return await sock.sendMessage(msg.chat, { sticker: pola_pikir }, { quoted: msg.raw });
   }
 
   let doAgain = true;

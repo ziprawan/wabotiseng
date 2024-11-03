@@ -1,10 +1,13 @@
 import { DatabaseSession } from "@/types/client";
+import { CronFunc } from "@/types/cron";
 import { BaileysEventList, EventHandlerFunc } from "@/types/events";
 import { writeErrorToFile } from "@/utils/error/write";
+import { FileLogger } from "@/utils/logger/file";
 import { useDatabaseAuthState } from "@/utils/session/manager";
 import { sleep } from "@/utils/sleep";
 import { Boom } from "@hapi/boom";
 import makeWASocket, { ConnectionState, DisconnectReason, WASocket } from "@whiskeysockets/baileys";
+import { CronJob } from "cron";
 import NodeCache, { EventEmitter } from "node-cache";
 import Pino from "pino";
 
@@ -42,6 +45,7 @@ export class Client extends EventEmitter {
     event: BaileysEventList;
     func: EventHandlerFunc<BaileysEventList>;
   }> = new Set();
+  #crons: Set<{ name: string; cronTime: string | Date; func: CronFunc }> = new Set();
 
   /**
    * Add event handler.
@@ -72,6 +76,11 @@ export class Client extends EventEmitter {
 
     await sleep(3000);
     return;
+  }
+
+  addCron(name: string, cronTime: string | Date, func: CronFunc): Client {
+    this.#crons.add({ name, cronTime, func });
+    return this;
   }
 
   /**
@@ -130,6 +139,23 @@ export class Client extends EventEmitter {
       printQRInTerminal: true,
       generateHighQualityLinkPreview: true,
       msgRetryCounterCache,
+    });
+
+    this.#crons.forEach((value) => {
+      const fileLogger = new FileLogger(value.name);
+      CronJob.from({
+        cronTime: value.cronTime,
+        onTick: async () => {
+          if (!this.socket) {
+            logger.error("socket is null!");
+            return;
+          }
+
+          await value.func(fileLogger, this.sessionName, this.socket);
+        },
+        start: true,
+        timeZone: "Asia/Jakarta",
+      });
     });
 
     this.#handlers.forEach((value) => {

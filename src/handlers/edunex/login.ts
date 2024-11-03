@@ -27,7 +27,7 @@ export const edunexLoginHandler: CommandHandlerFunc = async ({ msg, parser, sock
 
   const { args } = parser;
 
-  const savedSettings = await botDatabase.edunexSettings.findUnique({
+  const savedSettings = await botDatabase.edunexAccount.findUnique({
     where: {
       userId_credsName: {
         userId: msg.from,
@@ -42,7 +42,7 @@ export const edunexLoginHandler: CommandHandlerFunc = async ({ msg, parser, sock
       const me = await edunex.getMe();
 
       if (typeof me === "string") {
-        await botDatabase.edunexSettings.delete({
+        await botDatabase.edunexAccount.delete({
           where: {
             id: savedSettings.id,
           },
@@ -71,7 +71,7 @@ export const edunexLoginHandler: CommandHandlerFunc = async ({ msg, parser, sock
     return await msg.replyText("Invalid token! Please try again.");
   }
 
-  await botDatabase.edunexSettings.create({
+  await botDatabase.edunexAccount.create({
     data: {
       token,
       credsName: msg.sessionName,

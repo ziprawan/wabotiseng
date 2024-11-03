@@ -8,24 +8,24 @@ import { downloadEncryptedContent, getMediaKeys } from "@whiskeysockets/baileys"
 export const viewOnceAcceptHandler: CommandHandlerFunc = async ({ sock, msg }) => {
   if (!msg.reaction) return;
 
-  const resolvedMsg = await msg.reaction.resolveReactedMessage();
+  const resolvedReactMsg = await msg.reaction.resolveReactedMessage();
 
-  if (!resolvedMsg) {
+  if (!resolvedReactMsg) {
     return;
   }
 
   if (msg.reaction.content !== "✅") return;
 
-  if (!resolvedMsg.msgKey.fromMe) return;
+  if (!resolvedReactMsg.msgKey.fromMe) return;
 
-  const conversation = resolvedMsg.conversation;
+  const conversation = resolvedReactMsg.conversation;
 
   if (!conversation) return;
 
   const request = await botDatabase.requestViewOnce.findUnique({
     where: {
       confirmId_chatId_credsName: {
-        confirmId: resolvedMsg.id ?? "",
+        confirmId: resolvedReactMsg.id ?? "",
         chatId: msg.chat,
         credsName: msg.sessionName,
       },
@@ -33,14 +33,16 @@ export const viewOnceAcceptHandler: CommandHandlerFunc = async ({ sock, msg }) =
   });
 
   if (!request) {
-    return await sock.sendMessage(msg.chat, { text: "Request not found!" }, { quoted: msg.raw });
+    return;
   }
 
   const viewOnceMessage = (await Messages.getMessage(msg.client, msg.chat, request.messageId))?.viewOnceMessage;
   if (!viewOnceMessage) {
-    console.error(`Requested message is not a view once message!`);
+    writeErrorToFile(new Error("Requested message is not a view once message!"));
     return;
   }
+
+  if (msg.from !== viewOnceMessage.from) return;
 
   const mediaMessage = viewOnceMessage.audio ?? viewOnceMessage.video ?? viewOnceMessage.image ?? undefined;
   if (!mediaMessage) {
@@ -62,9 +64,7 @@ export const viewOnceAcceptHandler: CommandHandlerFunc = async ({ sock, msg }) =
 
       doAgain = false;
 
-      await botDatabase.requestViewOnce.update({ where: { id: request.id }, data: { accepted: true } });
-
-      return await sock.sendMessage(
+      await sock.sendMessage(
         msg.chat,
         {
           caption: viewOnceMessage.text ?? undefined,
@@ -76,6 +76,7 @@ export const viewOnceAcceptHandler: CommandHandlerFunc = async ({ sock, msg }) =
         },
         { quoted: msg.raw }
       );
+      await botDatabase.requestViewOnce.update({ where: { id: request.id }, data: { accepted: true } });
     } catch (err) {
       console.log("Failed! Trying again...");
       writeErrorToFile(err);

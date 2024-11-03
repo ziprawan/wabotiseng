@@ -15,7 +15,7 @@ import {
 } from "@/types/whatsapp";
 import { ContactMessage } from "@/types/whatsapp/contact";
 import { MessageHandlerType, MessageType } from "@/types/whatsapp/message";
-import { proto } from "@whiskeysockets/baileys";
+import { GroupMetadata, proto } from "@whiskeysockets/baileys";
 import { writeFileSync } from "node:fs";
 import { botDatabase } from "../database/client";
 import { writeErrorToFile } from "../error/write";
@@ -430,23 +430,16 @@ export class Messages {
     return null;
   }
 
-  async saveChatToDatabase(): Promise<boolean> {
-    if (!this.remoteJid) return false;
+  async saveChatToDatabase(force: boolean = false): Promise<GroupMetadata | string | null> {
+    if (!this.remoteJid) return null;
 
     if (!this.client.socket) throw new Error("Socket isn't initialized yet!");
 
-    if (await this.getChatFromDatabase()) return false;
+    if ((await this.getChatFromDatabase()) && !force) return null;
 
     if (this.chatType === "group") {
-      const {
-        id: remoteJid,
-        owner,
-        subjectTime,
-        creation,
-        participants,
-        descId: _,
-        ...groupMetadata
-      } = await this.client.socket.groupMetadata(this.remoteJid);
+      const metadata = await this.client.socket.groupMetadata(this.remoteJid);
+      const { id: remoteJid, owner, subjectTime, creation, participants, descId: _, ...groupMetadata } = metadata;
 
       await botDatabase.group.upsert({
         create: {
@@ -471,7 +464,7 @@ export class Messages {
         update: { ...groupMetadata },
       });
 
-      return true;
+      return metadata;
     }
 
     if (this.chatType === "private") {
@@ -481,12 +474,12 @@ export class Messages {
         update: { pushName: this.message.pushName },
       });
 
-      return true;
+      return this.message.pushName ?? "";
     }
 
     writeFileSync(`json/chat_${this.remoteJid}.json`, `Unhandled chatType ${this.chatType} for remoteJid ${this.remoteJid}`);
 
-    return false;
+    return null;
   }
 
   /**
@@ -549,12 +542,28 @@ export class Messages {
   }
 
   // Message utilities
-  async replyText(text: string, quotedMessage?: boolean): Promise<void> {
+  async replyText(text: string, quotedMessage?: boolean): Promise<proto.WebMessageInfo | undefined> {
     if (!this.client.socket) {
       throw new Error("Socket isn't initialized yet!");
     }
 
-    await this.client.socket.sendMessage(this.chat, { text }, { quoted: quotedMessage ? this.raw : undefined });
+    return await this.client.socket.sendMessage(this.chat, { text }, { quoted: quotedMessage ? this.raw : undefined });
+  }
+
+  async delete(): Promise<void> {
+    if (!this.client.socket) {
+      throw new Error("Socket isn't initialized yet!");
+    }
+
+    await this.client.socket.sendMessage(this.chat, { delete: this.msgKey });
+  }
+
+  async editText(newMessage: string): Promise<proto.WebMessageInfo | undefined> {
+    if (!this.client.socket) {
+      throw new Error("Socket isn't initialized yet!");
+    }
+
+    return await this.client.socket.sendMessage(this.chat, { text: newMessage, edit: this.msgKey }, { quoted: this.raw });
   }
 
   async handle(handler: MessageHandlerType) {
