@@ -179,3 +179,5 @@ dist
 # My Dump yo mamamia
 dump/
 errors/
+docs/build
+.venv
