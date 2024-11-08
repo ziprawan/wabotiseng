@@ -1,5 +1,8 @@
 import { CommandHandlerFunc } from "@/types/command/handler";
 import { botDatabase } from "@/utils/database/client";
+import { writeErrorToFile } from "@/utils/error/write";
+import { streamToBuffer } from "@/utils/stream/toBuffer";
+import { downloadEncryptedContent, getMediaKeys } from "@whiskeysockets/baileys";
 
 export const viewOnceCommandHandler: CommandHandlerFunc = async ({ sock, msg }) => {
   if (!msg.reply_to_message) {
@@ -20,6 +23,40 @@ export const viewOnceCommandHandler: CommandHandlerFunc = async ({ sock, msg }) 
   const mediaMessage = viewOnceMessage.audio ?? viewOnceMessage.video ?? viewOnceMessage.image ?? undefined;
   if (!mediaMessage) {
     return await sock.sendMessage(msg.chat, { text: "Unable to determine media type!" }, { quoted: msg.raw });
+  }
+
+  const mediaType = viewOnceMessage.audio ? "audio" : viewOnceMessage.video ? "video" : "image";
+
+  if (resolvedReply.from === msg.from) {
+    let doAgain = true;
+
+    while (doAgain) {
+      try {
+        const mediaUrl = mediaMessage.url;
+        const mediaKey = getMediaKeys(mediaMessage.mediaKey, mediaType);
+        const mediaBinary = await downloadEncryptedContent(mediaUrl, mediaKey);
+        const mediaBuffer = await streamToBuffer(mediaBinary);
+
+        doAgain = false;
+
+        return await sock.sendMessage(
+          msg.chat,
+          {
+            caption: viewOnceMessage.text ?? undefined,
+            ...(mediaType === "image"
+              ? { image: mediaBuffer }
+              : mediaType === "video"
+                ? { video: mediaBuffer }
+                : { audio: mediaBuffer }),
+          },
+          { quoted: msg.raw }
+        );
+      } catch (err) {
+        console.log("Failed! Trying again...");
+        writeErrorToFile(err);
+        continue;
+      }
+    }
   }
 
   const request = await botDatabase.requestViewOnce.findUnique({

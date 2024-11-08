@@ -358,6 +358,8 @@ export class Messages {
       this.message.message?.viewOnceMessageV2Extension?.message ??
       undefined;
 
+    if (!viewOnceMsg) return;
+
     return new Messages(this.client, { key: this.msgKey, message: viewOnceMsg });
   }
 
