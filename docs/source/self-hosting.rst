@@ -34,25 +34,28 @@ Ga susah tbh.
 3. Bikin file ``.env`` terus isi dengan value-mu
 
 Berikut variabel environment yang mungkin dibutuhkan
+  - ``SESSION_NAME``: Nama sesi yang bakal kesimpen di *collection* ``Creds``
   - ``MONGO_URL``: URL database MongoDB
-  - ``WHITELIST``` (opsional): Kumpulan remoteJid yang bisa menggunakan bot ini, dipisah pake koma. Biarin kosong kalau mau nerima semua chat.
+  - ``OWNER``: Jid dari sang pemilik. Formatnya ``<nomor telepon format internasional>@s.whatsapp.net`` ga pake <>.
+  - ``CONFESS_TARGET``: Jid yang bakal jadi target pengiriman pesan *confess*. Formatnya sama kayak ``OWNER``.
   - ``DEBUG_ID`` (opsional): Jid chat yang bisa digunakan untuk men-debug bot??.
+  - ``GROUPS`` (opsional): Kumpulan remoteJid yang bisa menggunakan bot ini, dipisah pake koma. Biarin kosong kalau mau nerima semua chat.
 
     Segala event ``message.upsert`` bakal kesimpen di folder ``json``
 
-4. Bikin folder kosong dengan nama-nama berikut:
+1. Bikin folder kosong dengan nama-nama berikut:
 
    - ``dist``
    - ``json``
    - ``errors``
    - ``logs``
-5. Sinkronisasi (😭) model database
+2. Sinkronisasi (😭) model database
    
    ``npm run prisma db push``
-6. Jalanin bot
+3. Jalanin bot
 
    ``npm start``
-7. Jika ini adalah pertama kalinya menjalankan bot, maka akan ditampilkan QR Code untuk di-*scan*. Cara *scan* sama kayak mau nge-*scan* di |wa_web|_
+4. Jika ini adalah pertama kalinya menjalankan bot, maka akan ditampilkan QR Code untuk di-*scan*. Cara *scan* sama kayak mau nge-*scan* di |wa_web|_
 
 *Troubleshooting*
 -----------------

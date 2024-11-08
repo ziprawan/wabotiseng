@@ -1,10 +1,16 @@
 export class Parser {
   private prefixes: string[];
-  private text: string;
+  text: string;
 
   constructor(prefixes: string[], text: string) {
     this.prefixes = prefixes;
     this.text = text;
+  }
+
+  get usedPrefix(): string | null {
+    if (this.prefixes.includes(this.text[0])) {
+      return this.text[0];
+    } else return null;
   }
 
   get command(): string | null {

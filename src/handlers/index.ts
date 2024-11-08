@@ -1,17 +1,17 @@
+import { edunexCourseListCronJob } from "@/crons/edunex/course-list";
+import { iya_njir } from "@/stickers";
 import { WASocket } from "@/types/socket";
 import { Messages } from "@/utils/classes/message";
 import { Parser } from "@/utils/classes/parser";
-import { stickerCommandHandler } from "./sticker/create";
-import { viewOnceCommandHandler } from "./viewonce/view";
-import { viewOnceAcceptHandler } from "./viewonce/accepted";
-import { edunexHandler } from "./edunex";
-import { edunexCourseListCronJob } from "@/crons/edunex/course-list";
 import { FileLogger } from "@/utils/logger/file";
-import { deleteHandler } from "./delete/request";
-import { deleteReactionhandler } from "./delete/react";
 import { BufferJSON } from "@whiskeysockets/baileys";
-import { readFileSync } from "node:fs";
-import { iya_njir } from "@/stickers";
+import { deleteReactionhandler } from "./delete/react";
+import { deleteHandler } from "./delete/request";
+import { edunexHandler } from "./edunex";
+import { stickerCommandHandler } from "./sticker/create";
+import { viewOnceAcceptHandler } from "./viewonce/accepted";
+import { viewOnceCommandHandler } from "./viewonce/view";
+import { confessHandler } from "./anons/confess";
 
 export async function mainHandler(sock: WASocket, msg: Messages) {
   const parser = new Parser([".", "/"], msg.text);
@@ -34,7 +34,7 @@ export async function mainHandler(sock: WASocket, msg: Messages) {
     await viewOnceCommandHandler(ctx);
   }
 
-  if (parser.command === "edunex") {
+  if (parser.command === "edunex" && msg.from === process.env.OWNER) {
     await edunexHandler(ctx);
   }
 
@@ -50,12 +50,17 @@ export async function mainHandler(sock: WASocket, msg: Messages) {
     await sock.sendMessage(msg.chat, { sticker: iya_njir });
   }
 
+  if (parser.command === "confess" && msg.chatType === "private" && process.env.CONFESS_TARGET) {
+    await confessHandler(ctx);
+  }
+
   if (msg.reaction) {
     await viewOnceAcceptHandler(ctx);
     await deleteReactionhandler(ctx);
   }
 
-  if (parser.command === "asdfghjkl") {
-    await edunexCourseListCronJob(new FileLogger("edunex-test"), msg.sessionName, sock);
+  if (parser.command === "asdfghjkl" && msg.from === process.env.OWNER) {
+    const res = await edunexCourseListCronJob(new FileLogger("edunex-test"), msg.sessionName, sock);
+    await msg.replyText(res, true);
   }
 }

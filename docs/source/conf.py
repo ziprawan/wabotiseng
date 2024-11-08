@@ -9,7 +9,7 @@
 project = 'OPC Bot'
 copyright = '2024, OPC'
 author = 'OPC'
-release = '2024.11.04'
+release = '2024.11.08'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

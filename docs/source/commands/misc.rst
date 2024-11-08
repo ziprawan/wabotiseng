@@ -9,5 +9,16 @@ Mengirim stiker "iya hahahaha"
 
 .. image:: ../../../src/stickers/iya_njir.webp
   :alt: Stiker iya hahahaha
-  :align: left
   :scale: 25%
+
+confess
+-------
+Mengirim pesan confess ke target yang sudah didefinisikan dalam variabel ``CONFESS_TARGET`` di file .env
+
+.. note:: Perintah ini hanya bisa dijalankan dalam *private chat*!
+
+Format pesan confess yang akan terkirim:
+
+  Chat! Someone confessed that
+
+  {your message}
