@@ -12,6 +12,7 @@ import { stickerCommandHandler } from "./sticker/create";
 import { viewOnceAcceptHandler } from "./viewonce/accepted";
 import { viewOnceCommandHandler } from "./viewonce/view";
 import { confessHandler } from "./anons/confess";
+import { broadcastHandler } from "./anons/broadcast";
 
 export async function mainHandler(sock: WASocket, msg: Messages) {
   const parser = new Parser([".", "/"], msg.text);
@@ -52,6 +53,18 @@ export async function mainHandler(sock: WASocket, msg: Messages) {
 
   if (parser.command === "confess" && msg.chatType === "private" && process.env.CONFESS_TARGET) {
     await confessHandler(ctx);
+  }
+
+  if (parser.command === "args" && msg.from === process.env.OWNER) {
+    return await msg.replyText(JSON.stringify(parser.args, null, 2), true);
+  }
+
+  if (parser.command === "broadcast" && msg.from === process.env.OWNER) {
+    return await broadcastHandler(ctx);
+  }
+
+  if (parser.command === "id") {
+    return await msg.replyText(`Your ID: ${msg.from}\nChat ID: ${msg.chat}`, true);
   }
 
   if (msg.reaction) {
