@@ -13,5 +13,9 @@ export const confessHandler: CommandHandlerFunc = async ({ msg, parser, sock }) 
   const pfx = parser.usedPrefix as string;
   const confessMsg = parser.text.replace(pfx + cmd, "").trim();
 
+  if (confessMsg === "") {
+    return await msg.replyText("Kasih pesannya dong kak (⁠ ⁠･ั⁠﹏⁠･ั⁠)");
+  }
+
   return await sock.sendMessage(CONFESS_TARGET, { text: `Chat! Someone confessed that\n${confessMsg}` });
 };
