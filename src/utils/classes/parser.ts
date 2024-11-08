@@ -1,3 +1,5 @@
+export type ArgType = { content: string; start: number; end: number };
+
 export class Parser {
   private prefixes: string[];
   text: string;
@@ -23,24 +25,28 @@ export class Parser {
     return null;
   }
 
-  get args(): string[] {
+  get args(): ArgType[] {
     if (!this.command) return [];
 
     const argsText = this.text.replace(/^[^\s]+\s*/, ""); // Remove the command part
-    const args: string[] = [];
+    const args: ArgType[] = [];
     let currentArg = "";
     let inQuotes = false;
     let quoteChar = "";
+    let argStart = this.text.indexOf(argsText);
+    let start = argStart;
 
     for (let i = 0; i < argsText.length; i++) {
       const char = argsText[i];
 
       if (inQuotes) {
         if (char === quoteChar) {
+          const end = argStart + i - 1;
           inQuotes = false;
-          args.push(currentArg);
+          args.push({ content: currentArg, start, end });
           currentArg = "";
         } else {
+          if (!currentArg) start = argStart + i;
           currentArg += char;
         }
       } else {
@@ -49,17 +55,20 @@ export class Parser {
           quoteChar = char;
         } else if (char === " " || char === "\n") {
           if (currentArg) {
-            args.push(currentArg);
+            const end = argStart + i - 1;
+            args.push({ content: currentArg, start, end });
             currentArg = "";
           }
         } else {
+          if (!currentArg) start = argStart + i;
           currentArg += char;
         }
       }
     }
 
     if (currentArg) {
-      args.push(currentArg);
+      const end = argsText.length + argStart - 1;
+      args.push({ content: currentArg, start, end });
     }
 
     return args;

@@ -20,7 +20,7 @@ export const stickerCommandHandler: CommandHandlerFunc = async ({ sock, msg, par
 
   while (doAgain) {
     try {
-      const emojis = parser.args[0];
+      const emojis = parser.args[0]?.content;
 
       // https://stackoverflow.com/a/68602748
       const segmenter = new Intl.Segmenter("en", { granularity: "grapheme" });

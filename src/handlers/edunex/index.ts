@@ -22,7 +22,7 @@ export const edunexHandler: CommandHandlerFunc = async (ctx) => {
     return await msg.replyText(EDUNEX_WELCOME_MSG.trim());
   }
 
-  const cmd = parser.args[0].toLowerCase();
+  const cmd = parser.args[0].content.toLowerCase();
 
   if (cmd === "login") {
     return await edunexLoginHandler(ctx);

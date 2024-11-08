@@ -16,7 +16,7 @@ import { confessHandler } from "./anons/confess";
 export async function mainHandler(sock: WASocket, msg: Messages) {
   const parser = new Parser([".", "/"], msg.text);
   console.log("==============================");
-  console.log(parser.command, parser.args);
+  console.log(parser.command, JSON.stringify(parser.args, null, 2));
   // console.log("Received msg:", msg);
   console.log("==============================");
 

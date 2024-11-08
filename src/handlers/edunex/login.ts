@@ -62,7 +62,7 @@ export const edunexLoginHandler: CommandHandlerFunc = async ({ msg, parser, sock
     return await msg.replyText("That's weird, you should report this error to me! [EDX0001]");
   }
 
-  const edunex = new EdunexAPI(token);
+  const edunex = new EdunexAPI(token.content);
   const me = await edunex.getMe();
 
   console.log(me);
@@ -73,7 +73,7 @@ export const edunexLoginHandler: CommandHandlerFunc = async ({ msg, parser, sock
 
   await botDatabase.edunexAccount.create({
     data: {
-      token,
+      token: token.content,
       credsName: msg.sessionName,
       userId: msg.from,
     },
