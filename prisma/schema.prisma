@@ -213,6 +213,7 @@ model Message {
   messageId String
   remoteJid String
   message   String
+  deleted   Boolean? @default(false) // Set to null if veiwed
 
   credsName String
   creds     Creds  @relation(references: [sessionName], fields: [credsName])
