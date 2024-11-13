@@ -1,12 +1,12 @@
 import { DatabaseSession } from "@/types/client";
 import { CronFunc } from "@/types/cron";
-import { BaileysEventList, EventHandlerFunc } from "@/types/events";
+import { BaileysEventList, EventHandlerFunc, WSHandlerFunc } from "@/types/events";
 import { writeErrorToFile } from "@/utils/error/write";
 import { FileLogger } from "@/utils/logger/file";
 import { useDatabaseAuthState } from "@/utils/session/manager";
 import { sleep } from "@/utils/sleep";
 import { Boom } from "@hapi/boom";
-import makeWASocket, { ConnectionState, DisconnectReason, WASocket } from "@whiskeysockets/baileys";
+import makeWASocket, { BinaryNode, ConnectionState, DisconnectReason, WASocket } from "@whiskeysockets/baileys";
 import { CronJob } from "cron";
 import NodeCache, { EventEmitter } from "node-cache";
 import Pino from "pino";
@@ -25,19 +25,20 @@ export class Client extends EventEmitter {
   /**
    * @constructor
    */
-  constructor(
-    sessionName: string,
-    private maxReconnectFails: number = 5
-  ) {
+  constructor(sessionName: string, private maxReconnectFails: number = 5) {
     super();
 
     this.sessionName = sessionName;
     this.reconnectFail = 0;
+    this.logger = logger;
+    this.caches = {};
   }
 
   public sessionName: string;
   public socket?: WASocket;
   public session?: DatabaseSession;
+  public logger: typeof Logger;
+  public caches: Record<string, any>;
 
   reconnectFail: number;
 
@@ -45,6 +46,7 @@ export class Client extends EventEmitter {
     event: BaileysEventList;
     func: EventHandlerFunc<BaileysEventList>;
   }> = new Set();
+  #wsHandlers: Set<{ event: string; func: WSHandlerFunc }> = new Set();
   #crons: Set<{ name: string; cronTime: string | Date; func: CronFunc }> = new Set();
 
   /**
@@ -57,6 +59,22 @@ export class Client extends EventEmitter {
     this.#handlers.add({
       event,
       func: func as EventHandlerFunc<BaileysEventList>,
+    });
+    return this;
+  }
+
+  /**
+   * Add websocket event handler.
+   *
+   * Useful for custom event handling
+   * @param {BaileysEventList} event Listener baileys name
+   * @param {EventHandlerFunc} func Listener function
+   * @return {Client}
+   */
+  addWSHandler(event: string, func: WSHandlerFunc): Client {
+    this.#wsHandlers.add({
+      event,
+      func,
     });
     return this;
   }
@@ -135,7 +153,7 @@ export class Client extends EventEmitter {
     this.session = await useDatabaseAuthState(this.sessionName);
     this.socket = makeWASocket({
       auth: this.session.state,
-      logger,
+      logger: this.logger,
       printQRInTerminal: true,
       generateHighQualityLinkPreview: true,
       msgRetryCounterCache,
@@ -160,6 +178,19 @@ export class Client extends EventEmitter {
 
     this.#handlers.forEach((value) => {
       this.socket?.ev.on(value.event, (arg) => {
+        if (!this.socket) {
+          logger.error("socket is null!");
+          return;
+        }
+
+        value.func(this.socket, arg).catch((err) => {
+          writeErrorToFile(err);
+        });
+      });
+    });
+
+    this.#wsHandlers.forEach((value) => {
+      this.socket?.ws.on(value.event, (arg: BinaryNode) => {
         if (!this.socket) {
           logger.error("socket is null!");
           return;
