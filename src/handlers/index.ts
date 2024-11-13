@@ -13,6 +13,7 @@ import { viewOnceAcceptHandler } from "./viewonce/accepted";
 import { viewOnceCommandHandler } from "./viewonce/view";
 import { confessHandler } from "./anons/confess";
 import { broadcastHandler } from "./anons/broadcast";
+import { snipeHandler } from "./snipe/snipe";
 
 export async function mainHandler(sock: WASocket, msg: Messages) {
   const parser = new Parser([".", "/"], msg.text);
@@ -67,6 +68,9 @@ export async function mainHandler(sock: WASocket, msg: Messages) {
     return await msg.replyText(`Your ID: ${msg.from}\nChat ID: ${msg.chat}`, true);
   }
 
+  if (parser.command === "snipe") {
+    await snipeHandler(ctx);
+  }
   if (msg.reaction) {
     await viewOnceAcceptHandler(ctx);
     await deleteReactionhandler(ctx);
