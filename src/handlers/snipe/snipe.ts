@@ -98,8 +98,8 @@ export const snipeHandler = async ({ msg, sock }: { msg: Messages; sock: WASocke
     return await sock.sendMessage(
       msg.chat,
       {
-        text: `@${jidDecode(msg.from)?.user}: ${text}`,
-        mentions: [...new Set([msg.from, ...(snipeMessage.mentions ?? [])])],
+        text: `@${jidDecode(snipeMessage.from)?.user}: ${text}`,
+        mentions: [...new Set([snipeMessage.from, ...(snipeMessage.mentions ?? [])])],
       },
       { quoted: msg.raw }
     );
