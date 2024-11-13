@@ -15,17 +15,15 @@ import {
 } from "@/types/whatsapp";
 import { ContactMessage } from "@/types/whatsapp/contact";
 import { MessageHandlerType, MessageType } from "@/types/whatsapp/message";
-import { GroupMetadata, proto } from "@whiskeysockets/baileys";
+import { getContentType, GroupMetadata, proto } from "@whiskeysockets/baileys";
 import { writeFileSync } from "node:fs";
 import { botDatabase } from "../database/client";
 import { writeErrorToFile } from "../error/write";
 import { ReactionClass } from "./reaction";
+import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
 
 export class Messages {
-  constructor(
-    client: Client,
-    private message: proto.IWebMessageInfo
-  ) {
+  constructor(client: Client, private message: proto.IWebMessageInfo) {
     this.client = client;
   }
 
@@ -72,8 +70,8 @@ export class Messages {
     return this.chatType === "group"
       ? this.msgKey.participant ?? ""
       : this.chatType === "private"
-        ? this.msgKey.remoteJid ?? ""
-        : "";
+      ? this.msgKey.remoteJid ?? ""
+      : "";
   }
 
   get raw(): proto.IWebMessageInfo {
@@ -96,6 +94,20 @@ export class Messages {
     }
 
     return undefined;
+  }
+
+  get mentions(): string[] | undefined {
+    const msg = this.message.message;
+    if (!msg) return;
+
+    const contentType = getContentType(msg);
+    const grabbedMsg = msg[contentType!];
+
+    if (!grabbedMsg || typeof grabbedMsg !== "object" || !("contextInfo" in grabbedMsg)) {
+      return;
+    }
+
+    return grabbedMsg.contextInfo?.mentionedJid ?? undefined;
   }
 
   get reply_to_message(): Messages | undefined {
@@ -479,7 +491,10 @@ export class Messages {
       return this.message.pushName ?? "";
     }
 
-    writeFileSync(`json/chat_${this.remoteJid}.json`, `Unhandled chatType ${this.chatType} for remoteJid ${this.remoteJid}`);
+    writeFileSync(
+      `json/chat_${this.remoteJid}.json`,
+      `Unhandled chatType ${this.chatType} for remoteJid ${this.remoteJid}`
+    );
 
     return null;
   }
@@ -511,18 +526,52 @@ export class Messages {
       await this.saveChatToDatabase();
     }
 
-    await botDatabase.message.upsert({
-      create: {
-        credsName: this.sessionName,
-        messageId: this.id,
-        remoteJid: this.remoteJid,
-        message: JSON.stringify(this.message),
-      },
-      where: {
-        messageId_remoteJid_credsName: { credsName: this.sessionName, messageId: this.id, remoteJid: this.remoteJid },
-      },
-      update: { message: JSON.stringify(this.message) },
-    });
+    const msg = this.raw.message?.protocolMessage;
+
+    if (msg && msg.type === proto.Message.ProtocolMessage.Type.REVOKE) {
+      this.client.caches[`delete-${this.remoteJid}-${msg.key?.id ?? ""}`] = true;
+      try {
+        await botDatabase.message.update({
+          where: {
+            messageId_remoteJid_credsName: {
+              credsName: this.sessionName,
+              messageId: msg.key?.id ?? "",
+              remoteJid: this.remoteJid,
+            },
+          },
+          data: { deleted: true },
+        });
+      } catch (err) {
+        if (err instanceof PrismaClientKnownRequestError && err.code !== "P2025") {
+          writeErrorToFile(err);
+        } else {
+          console.warn("Message is not saved yet.");
+        }
+
+        return false;
+      }
+    } else {
+      await botDatabase.message.upsert({
+        create: {
+          credsName: this.sessionName,
+          messageId: this.id,
+          remoteJid: this.remoteJid,
+          message: JSON.stringify(this.message),
+          deleted: this.client.caches[`delete-${this.remoteJid}-${this.id}`] === true,
+        },
+        where: {
+          messageId_remoteJid_credsName: { credsName: this.sessionName, messageId: this.id, remoteJid: this.remoteJid },
+        },
+        update: {
+          message: JSON.stringify(this.message),
+          deleted: this.client.caches[`delete-${this.remoteJid}-${this.id}`] === true,
+        },
+      });
+
+      if (this.client.caches[`delete-${this.remoteJid}-${this.id}`] === true) {
+        delete this.client.caches[`delete-${this.remoteJid}-${this.id}`];
+      }
+    }
 
     return true;
   }
@@ -565,7 +614,11 @@ export class Messages {
       throw new Error("Socket isn't initialized yet!");
     }
 
-    return await this.client.socket.sendMessage(this.chat, { text: newMessage, edit: this.msgKey }, { quoted: this.raw });
+    return await this.client.socket.sendMessage(
+      this.chat,
+      { text: newMessage, edit: this.msgKey },
+      { quoted: this.raw }
+    );
   }
 
   async handle(handler: MessageHandlerType) {
