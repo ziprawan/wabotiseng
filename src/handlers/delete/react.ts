@@ -1,6 +1,6 @@
+import { postgresDb } from "@/database/client";
 import { CommandHandlerFunc } from "@/types/command/handler";
 import { Messages } from "@/utils/classes/message";
-import { botDatabase } from "@/utils/database/client";
 import { MINIMUM_ACCEPTS } from "./request";
 
 const AGREE = "✅";
@@ -26,15 +26,14 @@ export const deleteReactionhandler: CommandHandlerFunc = async ({ sock, msg }) =
 
   if (!conversation) return;
 
-  const request = await botDatabase.requestDeleteMessage.findUnique({
-    where: {
-      confirmId_chatId_credsName: {
-        confirmId: resolvedReactMsg.id ?? "",
-        chatId: msg.chat,
-        credsName: msg.sessionName,
-      },
-    },
-  });
+  const request = await postgresDb
+    .selectFrom("request_delete_message as rdm")
+    .select(["rdm.done", "rdm.agrees", "rdm.disagrees", "rdm.message_id", "rdm.id"])
+    .innerJoin("entity as e", "e.id", "rdm.entity_id")
+    .where("rdm.confirm_id", "=", resolvedReactMsg.id ?? "")
+    .where("e.remote_jid", "=", msg.chat)
+    .where("e.creds_name", "=", msg.sessionName)
+    .executeTakeFirst();
 
   if (!request) {
     return;
@@ -61,34 +60,30 @@ export const deleteReactionhandler: CommandHandlerFunc = async ({ sock, msg }) =
   const votes = agrees.length - disagrees.length;
 
   if (votes >= MINIMUM_ACCEPTS) {
-    const deleteMessage = await Messages.getMessage(msg.client, msg.chat, request.messageId);
+    const deleteMessage = await Messages.getMessage(msg.client, msg.chat, request.message_id);
 
     if (!deleteMessage) {
-      await botDatabase.requestDeleteMessage.update({
-        where: { id: request.id },
-        data: { done: true },
-      });
+      await postgresDb.updateTable("request_delete_message").set({ done: true }).where("id", "=", request.id).execute();
       return;
     }
 
     await deleteMessage.delete();
     await resolvedReactMsg.editText(`Message deleted!`);
     await (await resolvedReactMsg.resolveReplyToMessage())?.delete();
-    await botDatabase.requestDeleteMessage.update({
-      where: { id: request.id },
-      data: { agrees, disagrees, done: true },
-    });
+    await postgresDb
+      .updateTable("request_delete_message")
+      .set({ agrees, disagrees, done: true })
+      .where("id", "=", request.id)
+      .execute();
   } else if (votes <= -MINIMUM_ACCEPTS) {
     await resolvedReactMsg.editText(`${MINIMUM_ACCEPTS} people(s) disagreed to delete this message.`);
 
-    await botDatabase.requestDeleteMessage.update({
-      where: { id: request.id },
-      data: { agrees, disagrees, done: true },
-    });
+    await postgresDb
+      .updateTable("request_delete_message")
+      .set({ agrees, disagrees, done: true })
+      .where("id", "=", request.id)
+      .execute();
   } else {
-    await botDatabase.requestDeleteMessage.update({
-      where: { id: request.id },
-      data: { agrees, disagrees },
-    });
+    await postgresDb.updateTable("request_delete_message").set({ agrees, disagrees }).where("id", "=", request.id).execute();
   }
 };

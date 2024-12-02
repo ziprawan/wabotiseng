@@ -1,6 +1,7 @@
+import { projectConfig } from "@/config";
 import { CommandHandlerFunc } from "@/types/command/handler";
 
-const CONFESS_TARGET = process.env.CONFESS_TARGET;
+const CONFESS_TARGET = projectConfig.CONFESS_TARGET;
 
 export const confessHandler: CommandHandlerFunc = async ({ msg, parser, sock }) => {
   if (!CONFESS_TARGET) return;

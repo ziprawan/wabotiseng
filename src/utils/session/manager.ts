@@ -1,3 +1,4 @@
+import { postgresDb } from "@/database/client";
 import {
   AuthenticationCreds,
   AuthenticationState,
@@ -6,7 +7,6 @@ import {
   proto,
   SignalDataTypeMap,
 } from "@whiskeysockets/baileys";
-import { botDatabase } from "../database/client";
 
 type DataType = keyof SignalDataTypeMap | "creds";
 
@@ -18,56 +18,63 @@ export const useDatabaseAuthState = async (
   saveCreds: () => Promise<void>;
   removeCreds: () => Promise<void>;
 }> => {
-  const writeData = async (data: any, type: DataType, id: string) => {
+  const writeData = async (data: any, type: DataType, name: string) => {
+    const content = JSON.stringify(data, BufferJSON.replacer);
     switch (type) {
       case "pre-key":
-        await botDatabase.preKey.upsert({
-          where: { name_credsName: { name: id, credsName: sessionName } },
-          create: { credsName: sessionName, content: JSON.stringify(data, BufferJSON.replacer), name: id },
-          update: { content: JSON.stringify(data, BufferJSON.replacer) },
-        });
+        await postgresDb
+          .insertInto("pre_key")
+          .values({ content, name, creds_name: sessionName })
+          .onConflict((oc) => oc.constraint("pre_key_pk").doUpdateSet({ content }))
+          .onConflict((oc) => oc.constraint("pre_key_creds_and_name").doUpdateSet({ content }))
+          .execute();
         break;
       case "session":
-        await botDatabase.session.upsert({
-          where: { name_credsName: { name: id, credsName: sessionName } },
-          create: { credsName: sessionName, content: JSON.stringify(data, BufferJSON.replacer), name: id },
-          update: { content: JSON.stringify(data, BufferJSON.replacer) },
-        });
+        await postgresDb
+          .insertInto("session")
+          .values({ content, name, creds_name: sessionName })
+          .onConflict((oc) => oc.constraint("session_pk").doUpdateSet({ content }))
+          .onConflict((oc) => oc.constraint("session_creds_and_name").doUpdateSet({ content }))
+          .execute();
         break;
       case "sender-key":
-        await botDatabase.senderKey.upsert({
-          where: { name_credsName: { name: id, credsName: sessionName } },
-          create: { credsName: sessionName, content: JSON.stringify(data, BufferJSON.replacer), name: id },
-          update: { content: JSON.stringify(data, BufferJSON.replacer) },
-        });
+        await postgresDb
+          .insertInto("sender_key")
+          .values({ content, name, creds_name: sessionName })
+          .onConflict((oc) => oc.constraint("sender_key_pk").doUpdateSet({ content }))
+          .onConflict((oc) => oc.constraint("sender_key_creds_and_name").doUpdateSet({ content }))
+          .execute();
         break;
       case "sender-key-memory":
-        await botDatabase.senderKeyMemory.upsert({
-          where: { name_credsName: { name: id, credsName: sessionName } },
-          create: { credsName: sessionName, content: JSON.stringify(data, BufferJSON.replacer), name: id },
-          update: { content: JSON.stringify(data, BufferJSON.replacer) },
-        });
+        await postgresDb
+          .insertInto("sender_key_memory")
+          .values({ content, name, creds_name: sessionName })
+          .onConflict((oc) => oc.constraint("sender_key_memory_pk").doUpdateSet({ content }))
+          .onConflict((oc) => oc.constraint("sender_key_memory_cred_and_name").doUpdateSet({ content }))
+          .execute();
         break;
       case "app-state-sync-key":
-        await botDatabase.appStateSyncKey.upsert({
-          where: { name_credsName: { name: id, credsName: sessionName } },
-          create: { credsName: sessionName, content: JSON.stringify(data, BufferJSON.replacer), name: id },
-          update: { content: JSON.stringify(data, BufferJSON.replacer) },
-        });
+        await postgresDb
+          .insertInto("app_state_sync_key")
+          .values({ content, name, creds_name: sessionName })
+          .onConflict((oc) => oc.constraint("app_state_sync_key_pk").doUpdateSet({ content }))
+          .onConflict((oc) => oc.constraint("app_state_sync_key_creds_and_name").doUpdateSet({ content }))
+          .execute();
         break;
       case "app-state-sync-version":
-        await botDatabase.appStateSyncVersion.upsert({
-          where: { name_credsName: { name: id, credsName: sessionName } },
-          create: { credsName: sessionName, content: JSON.stringify(data, BufferJSON.replacer), name: id },
-          update: { content: JSON.stringify(data, BufferJSON.replacer) },
-        });
+        await postgresDb
+          .insertInto("app_state_sync_version")
+          .values({ content, name, creds_name: sessionName })
+          .onConflict((oc) => oc.constraint("app_state_sync_version_pk").doUpdateSet({ content }))
+          .onConflict((oc) => oc.constraint("app_state_sync_version_creds_and_name").doUpdateSet({ content }))
+          .execute();
         break;
       case "creds":
-        await botDatabase.creds.upsert({
-          where: { sessionName },
-          create: { sessionName, sessionString: JSON.stringify(data, BufferJSON.replacer) },
-          update: { sessionString: JSON.stringify(data, BufferJSON.replacer) },
-        });
+        await postgresDb
+          .insertInto("cred")
+          .values({ session_name: sessionName, session_string: content })
+          .onConflict((oc) => oc.constraint("cred_pk").doUpdateSet({ session_string: content }))
+          .execute();
         break;
       default:
         throw new TypeError(`Invalid data type "${type}"`);
@@ -81,34 +88,73 @@ export const useDatabaseAuthState = async (
       let found: string | null | undefined;
       switch (type) {
         case "pre-key":
-          found = (await botDatabase.preKey.findUnique({ where: { name_credsName: { name: id, credsName: sessionName } } }))
-            ?.content;
+          found = (
+            await postgresDb
+              .selectFrom("pre_key")
+              .select(["content"])
+              .where("creds_name", "=", sessionName)
+              .where("name", "=", id)
+              .executeTakeFirst()
+          )?.content;
           break;
         case "session":
-          found = (await botDatabase.session.findUnique({ where: { name_credsName: { name: id, credsName: sessionName } } }))
-            ?.content;
+          found = (
+            await postgresDb
+              .selectFrom("session")
+              .select(["content"])
+              .where("creds_name", "=", sessionName)
+              .where("name", "=", id)
+              .executeTakeFirst()
+          )?.content;
           break;
         case "sender-key":
-          found = (await botDatabase.senderKey.findUnique({ where: { name_credsName: { name: id, credsName: sessionName } } }))
-            ?.content;
+          found = (
+            await postgresDb
+              .selectFrom("sender_key")
+              .select(["content"])
+              .where("creds_name", "=", sessionName)
+              .where("name", "=", id)
+              .executeTakeFirst()
+          )?.content;
           break;
         case "sender-key-memory":
           found = (
-            await botDatabase.senderKeyMemory.findUnique({ where: { name_credsName: { name: id, credsName: sessionName } } })
+            await postgresDb
+              .selectFrom("sender_key_memory")
+              .select(["content"])
+              .where("creds_name", "=", sessionName)
+              .where("name", "=", id)
+              .executeTakeFirst()
           )?.content;
           break;
         case "app-state-sync-key":
           found = (
-            await botDatabase.appStateSyncKey.findUnique({ where: { name_credsName: { name: id, credsName: sessionName } } })
+            await postgresDb
+              .selectFrom("app_state_sync_key")
+              .select(["content"])
+              .where("creds_name", "=", sessionName)
+              .where("name", "=", id)
+              .executeTakeFirst()
           )?.content;
           break;
         case "app-state-sync-version":
           found = (
-            await botDatabase.appStateSyncVersion.findUnique({ where: { name_credsName: { name: id, credsName: sessionName } } })
+            await postgresDb
+              .selectFrom("app_state_sync_version")
+              .select(["content"])
+              .where("creds_name", "=", sessionName)
+              .where("name", "=", id)
+              .executeTakeFirst()
           )?.content;
           break;
         case "creds":
-          found = (await botDatabase.creds.findUnique({ where: { sessionName } }))?.sessionString;
+          found = (
+            await postgresDb
+              .selectFrom("cred")
+              .select(["session_string"])
+              .where("session_name", "=", sessionName)
+              .executeTakeFirst()
+          )?.session_string;
           break;
         default:
           throw new TypeError(`Invalid data type "${type}"`);
@@ -125,36 +171,37 @@ export const useDatabaseAuthState = async (
   const removeData = async (type: DataType, id: string) => {
     switch (type) {
       case "pre-key":
-        await botDatabase.preKey.deleteMany({ where: { name: id, credsName: sessionName } });
+        await postgresDb.deleteFrom("pre_key").where("name", "=", id).where("creds_name", "=", sessionName).execute();
         break;
       case "session":
-        await botDatabase.session.deleteMany({ where: { name: id, credsName: sessionName } });
+        await postgresDb.deleteFrom("session").where("name", "=", id).where("creds_name", "=", sessionName).execute();
         break;
       case "sender-key":
-        await botDatabase.senderKey.deleteMany({ where: { name: id, credsName: sessionName } });
+        await postgresDb.deleteFrom("sender_key").where("name", "=", id).where("creds_name", "=", sessionName).execute();
         break;
       case "sender-key-memory":
-        await botDatabase.senderKeyMemory.deleteMany({ where: { name: id, credsName: sessionName } });
+        await postgresDb
+          .deleteFrom("sender_key_memory")
+          .where("name", "=", id)
+          .where("creds_name", "=", sessionName)
+          .execute();
         break;
       case "app-state-sync-key":
-        await botDatabase.appStateSyncKey.deleteMany({ where: { name: id, credsName: sessionName } });
+        await postgresDb
+          .deleteFrom("app_state_sync_key")
+          .where("name", "=", id)
+          .where("creds_name", "=", sessionName)
+          .execute();
         break;
       case "app-state-sync-version":
-        await botDatabase.appStateSyncVersion.deleteMany({ where: { name: id, credsName: sessionName } });
+        await postgresDb
+          .deleteFrom("app_state_sync_version")
+          .where("name", "=", id)
+          .where("creds_name", "=", sessionName)
+          .execute();
         break;
       case "creds":
-        await botDatabase.creds.update({
-          where: { sessionName },
-          data: {
-            AppStateSyncKey: { deleteMany: {} },
-            AppStateSyncVersion: { deleteMany: {} },
-            PreKey: { deleteMany: {} },
-            SenderKey: { deleteMany: {} },
-            SenderKeyMemory: { deleteMany: {} },
-            Session: { deleteMany: {} },
-          },
-        });
-        await botDatabase.creds.deleteMany({ where: { sessionName } });
+        await postgresDb.deleteFrom("cred").where("session_name", "=", sessionName).execute();
         break;
       default:
         throw new TypeError(`Invalid data type "${type}"`);
@@ -201,7 +248,7 @@ export const useDatabaseAuthState = async (
       return await writeData(creds, "creds", "");
     },
     removeCreds: async () => {
-      return await removeData("creds", "'");
+      return await removeData("creds", "");
     },
   };
 };

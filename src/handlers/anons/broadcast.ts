@@ -1,18 +1,23 @@
+import { projectConfig } from "@/config";
+import { postgresDb } from "@/database/client";
 import { CommandHandlerFunc } from "@/types/command/handler";
-import { botDatabase } from "@/utils/database/client";
 import { downloadMediaMessage } from "@whiskeysockets/baileys";
 
 export const broadcastHandler: CommandHandlerFunc = async ({ msg, parser, sock }) => {
-  if (msg.from !== process.env.OWNER || msg.chatType !== "private") {
+  if (msg.from !== projectConfig.OWNER || msg.chatType !== "private") {
     return;
   }
 
   const target = parser.args[0];
   const startBroadMsg = parser.args[1];
 
-  const foundTarget = await botDatabase.group.findUnique({
-    where: { credsName_remoteJid: { credsName: msg.sessionName, remoteJid: target?.content ?? "" } },
-  });
+  const foundTarget = await postgresDb
+    .selectFrom("group as g")
+    .innerJoin("entity as e", "e.id", "g.id")
+    .select(["e.remote_jid"])
+    .where("e.creds_name", "=", msg.sessionName)
+    .where("e.remote_jid", "=", target?.content ?? "")
+    .executeTakeFirst();
 
   if (!foundTarget) {
     return await msg.replyText(`Group ${target} is not found!`, true);
@@ -35,26 +40,26 @@ export const broadcastHandler: CommandHandlerFunc = async ({ msg, parser, sock }
       if (rawMsg) {
         if (rawMsg["audioMessage"]) {
           const media = await downloadMediaMessage(raw, "buffer", {});
-          return await sock.sendMessage(foundTarget.remoteJid, { audio: media, caption });
+          return await sock.sendMessage(foundTarget.remote_jid, { audio: media, caption });
         } else if (rawMsg["videoMessage"]) {
           const media = await downloadMediaMessage(raw, "buffer", {});
-          return await sock.sendMessage(foundTarget.remoteJid, { video: media, caption });
+          return await sock.sendMessage(foundTarget.remote_jid, { video: media, caption });
         } else if (rawMsg["imageMessage"]) {
           const media = await downloadMediaMessage(raw, "buffer", {});
-          return await sock.sendMessage(foundTarget.remoteJid, { image: media, caption });
+          return await sock.sendMessage(foundTarget.remote_jid, { image: media, caption });
         } else if (rawMsg["stickerMessage"]) {
           const media = await downloadMediaMessage(raw, "buffer", {});
-          return await sock.sendMessage(foundTarget.remoteJid, { sticker: media });
+          return await sock.sendMessage(foundTarget.remote_jid, { sticker: media });
         } else if (rawMsg["documentMessage"]) {
           const media = await downloadMediaMessage(raw, "buffer", {});
-          return await sock.sendMessage(foundTarget.remoteJid, {
+          return await sock.sendMessage(foundTarget.remote_jid, {
             document: media,
             mimetype: rawMsg.documentMessage.mimetype ?? "text/plain",
             caption,
           });
         } else if (rawMsg["ptvMessage"]) {
           const media = await downloadMediaMessage(raw, "buffer", {});
-          return await sock.sendMessage(foundTarget.remoteJid, { video: media, ptv: true, caption });
+          return await sock.sendMessage(foundTarget.remote_jid, { video: media, ptv: true, caption });
         } else {
           throw new Error(`Cannot extract message content from replied message`);
         }
@@ -63,7 +68,7 @@ export const broadcastHandler: CommandHandlerFunc = async ({ msg, parser, sock }
       }
     } catch {
       if (repliedMessage.text.trim() !== "") {
-        return await sock.sendMessage(foundTarget.remoteJid, { text: repliedMessage.text });
+        return await sock.sendMessage(foundTarget.remote_jid, { text: repliedMessage.text });
       } else {
         return await msg.replyText(`Sorry! That message is not supported for broadcasting!`, true);
       }
@@ -76,5 +81,5 @@ export const broadcastHandler: CommandHandlerFunc = async ({ msg, parser, sock }
 
   const broadMsg = parser.text.slice(startBroadMsg.start);
 
-  return await sock.sendMessage(foundTarget.remoteJid, { text: broadMsg });
+  return await sock.sendMessage(foundTarget.remote_jid, { text: broadMsg });
 };

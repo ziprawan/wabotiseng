@@ -1,6 +1,6 @@
+import { postgresDb } from "@/database/client";
 import { CommandHandlerFunc } from "@/types/command/handler";
 import { Messages } from "@/utils/classes/message";
-import { botDatabase } from "@/utils/database/client";
 import { writeErrorToFile } from "@/utils/error/write";
 import { streamToBuffer } from "@/utils/stream/toBuffer";
 import { downloadEncryptedContent, getMediaKeys } from "@whiskeysockets/baileys";
@@ -22,21 +22,20 @@ export const viewOnceAcceptHandler: CommandHandlerFunc = async ({ sock, msg }) =
 
   if (!conversation) return;
 
-  const request = await botDatabase.requestViewOnce.findUnique({
-    where: {
-      confirmId_chatId_credsName: {
-        confirmId: resolvedReactMsg.id ?? "",
-        chatId: msg.chat,
-        credsName: msg.sessionName,
-      },
-    },
-  });
+  const request = await postgresDb
+    .selectFrom("request_view_once as rvo")
+    .select(["rvo.message_id", "rvo.accepted", "rvo.id"])
+    .innerJoin("entity as e", "e.id", "rvo.entity_id")
+    .where("rvo.confirm_id", "=", resolvedReactMsg.id ?? "")
+    .where("e.remote_jid", "=", msg.chat)
+    .where("e.creds_name", "=", msg.sessionName)
+    .executeTakeFirst();
 
   if (!request) {
     return;
   }
 
-  const viewOnceMessage = (await Messages.getMessage(msg.client, msg.chat, request.messageId))?.viewOnceMessage;
+  const viewOnceMessage = (await Messages.getMessage(msg.client, msg.chat, request.message_id))?.viewOnceMessage;
   if (!viewOnceMessage) {
     writeErrorToFile(new Error("Requested message is not a view once message!"));
     return;
@@ -71,12 +70,12 @@ export const viewOnceAcceptHandler: CommandHandlerFunc = async ({ sock, msg }) =
           ...(mediaType === "image"
             ? { image: mediaBuffer }
             : mediaType === "video"
-              ? { video: mediaBuffer }
-              : { audio: mediaBuffer }),
+            ? { video: mediaBuffer }
+            : { audio: mediaBuffer }),
         },
         { quoted: msg.raw }
       );
-      await botDatabase.requestViewOnce.update({ where: { id: request.id }, data: { accepted: true } });
+      await postgresDb.updateTable("request_view_once as rvo").where("rvo.id", "=", request.id).set({ accepted: true });
     } catch (err) {
       console.log("Failed! Trying again...");
       writeErrorToFile(err);

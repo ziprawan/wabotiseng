@@ -1,19 +1,19 @@
-import { edunexCourseListCronJob } from "@/crons/edunex/course-list";
+import { projectConfig } from "@/config";
 import { iya_njir } from "@/stickers";
 import { WASocket } from "@/types/socket";
 import { Messages } from "@/utils/classes/message";
 import { Parser } from "@/utils/classes/parser";
 import { FileLogger } from "@/utils/logger/file";
 import { BufferJSON } from "@whiskeysockets/baileys";
+import { broadcastHandler } from "./anons/broadcast";
+import { confessHandler } from "./anons/confess";
 import { deleteReactionhandler } from "./delete/react";
 import { deleteHandler } from "./delete/request";
 import { edunexHandler } from "./edunex";
+import { snipeHandler } from "./snipe/snipe";
 import { stickerCommandHandler } from "./sticker/create";
 import { viewOnceAcceptHandler } from "./viewonce/accepted";
 import { viewOnceCommandHandler } from "./viewonce/view";
-import { confessHandler } from "./anons/confess";
-import { broadcastHandler } from "./anons/broadcast";
-import { snipeHandler } from "./snipe/snipe";
 
 export async function mainHandler(sock: WASocket, msg: Messages) {
   const parser = new Parser([".", "/"], msg.text);
@@ -36,7 +36,7 @@ export async function mainHandler(sock: WASocket, msg: Messages) {
     await viewOnceCommandHandler(ctx);
   }
 
-  if (parser.command === "edunex" && msg.from === process.env.OWNER) {
+  if (parser.command === "edunex" && msg.from === projectConfig.OWNER) {
     await edunexHandler(ctx);
   }
 
@@ -52,15 +52,15 @@ export async function mainHandler(sock: WASocket, msg: Messages) {
     await sock.sendMessage(msg.chat, { sticker: iya_njir });
   }
 
-  if (parser.command === "confess" && msg.chatType === "private" && process.env.CONFESS_TARGET) {
+  if (parser.command === "confess" && msg.chatType === "private" && projectConfig.CONFESS_TARGET) {
     await confessHandler(ctx);
   }
 
-  if (parser.command === "args" && msg.from === process.env.OWNER) {
+  if (parser.command === "args" && msg.from === projectConfig.OWNER) {
     return await msg.replyText(JSON.stringify(parser.args, null, 2), true);
   }
 
-  if (parser.command === "broadcast" && msg.from === process.env.OWNER) {
+  if (parser.command === "broadcast" && msg.from === projectConfig.OWNER) {
     return await broadcastHandler(ctx);
   }
 
@@ -76,8 +76,8 @@ export async function mainHandler(sock: WASocket, msg: Messages) {
     await deleteReactionhandler(ctx);
   }
 
-  if (parser.command === "asdfghjkl" && msg.from === process.env.OWNER) {
-    const res = await edunexCourseListCronJob(new FileLogger("edunex-test"), msg.sessionName, sock);
-    await msg.replyText(res, true);
-  }
+  // if (parser.command === "asdfghjkl" && msg.from === projectConfig.OWNER) {
+  //   const res = await edunexCourseListCronJob(new FileLogger("edunex-test"), msg.sessionName, sock);
+  //   await msg.replyText(res, true);
+  // }
 }

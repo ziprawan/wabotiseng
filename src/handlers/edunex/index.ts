@@ -1,5 +1,4 @@
 import { CommandHandlerFunc } from "@/types/command/handler";
-import { botDatabase } from "@/utils/database/client";
 import { edunexLoginHandler } from "./login";
 
 const EDUNEX_WELCOME_MSG = `

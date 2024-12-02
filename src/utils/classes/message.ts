@@ -1,4 +1,5 @@
 import { Client } from "@/client";
+import { postgresDb } from "@/database/client";
 import { Chat } from "@/types/chat";
 import {
   Audio,
@@ -15,12 +16,12 @@ import {
 } from "@/types/whatsapp";
 import { ContactMessage } from "@/types/whatsapp/contact";
 import { MessageHandlerType, MessageType } from "@/types/whatsapp/message";
+import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
 import { getContentType, GroupMetadata, proto } from "@whiskeysockets/baileys";
 import { writeFileSync } from "node:fs";
-import { botDatabase } from "../database/client";
+import { participantRoleToEnum } from "../enum/participant_role";
 import { writeErrorToFile } from "../error/write";
 import { ReactionClass } from "./reaction";
-import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
 
 export class Messages {
   constructor(client: Client, private message: proto.IWebMessageInfo) {
@@ -67,11 +68,18 @@ export class Messages {
   }
 
   get from(): string {
-    return this.chatType === "group"
-      ? this.msgKey.participant ?? ""
-      : this.chatType === "private"
-      ? this.msgKey.remoteJid ?? ""
-      : "";
+    if (!this.chatType) return "";
+
+    switch (this.chatType) {
+      case "private":
+        return this.remoteJid ?? "";
+      case "group":
+        return this.msgKey.participant ?? "";
+      case "broadcast":
+        return this.msgKey.participant ?? "";
+      default:
+        return "";
+    }
   }
 
   get raw(): proto.IWebMessageInfo {
@@ -381,28 +389,33 @@ export class Messages {
     if (!this.remoteJid) return null;
 
     if (this.chatType === "group") {
-      const groupData = await botDatabase.group.findUnique({
-        where: { credsName_remoteJid: { credsName: this.client.sessionName, remoteJid: this.remoteJid } },
-      });
+      const groupData = await postgresDb
+        .selectFrom("entity as e")
+        .innerJoin("group as g", "g.id", "e.id")
+        .selectAll()
+        .where("remote_jid", "=", this.remoteJid)
+        .where("creds_name", "=", this.sessionName)
+        .where("type", "=", "Group")
+        .executeTakeFirst();
 
       if (!groupData) return null;
 
       const {
-        remoteJid: id,
+        remote_jid: id,
         creation: createdAt,
         owner,
         subject,
-        subjectOwner,
-        subjectTime,
+        subject_owner,
+        subject_time,
         desc,
-        descOwner,
+        desc_owner,
         size: membersCount,
-        ephemeralDuration: disappearingMessageDuration,
+        ephemeral_duration: disappearingMessageDuration,
         announce,
         restrict,
-        memberAddMode,
-        joinApprovalMode: needAdminApprovalToJoin,
-        linkedParent,
+        member_add_mode,
+        join_approval_mode: needAdminApprovalToJoin,
+        linked_parent,
       } = groupData;
 
       return {
@@ -412,31 +425,36 @@ export class Messages {
         owner,
         membersCount,
         disappearingMessageDuration,
-        canAddMembers: !memberAddMode,
+        canAddMembers: !member_add_mode,
         canEditGroupInfo: !restrict,
         canSendMessages: !announce,
         needAdminApprovalToJoin,
-        linkedParent,
+        linkedParent: linked_parent,
         subject: {
           content: subject,
-          modifiedBy: subjectOwner,
-          modifiedAt: subjectTime,
+          modifiedBy: subject_owner,
+          modifiedAt: subject_time,
         },
         description: {
           content: desc ?? "",
-          modifiedBy: descOwner,
+          modifiedBy: desc_owner,
         },
       };
     }
 
     if (this.chatType === "private") {
-      const contact = await botDatabase.contact.findUnique({
-        where: { credsName_remoteJid: { credsName: this.client.sessionName, remoteJid: this.remoteJid } },
-      });
+      const contact = await postgresDb
+        .selectFrom("entity as e")
+        .innerJoin("contact as c", "c.id", "e.id")
+        .selectAll()
+        .where("remote_jid", "=", this.remoteJid)
+        .where("creds_name", "=", this.sessionName)
+        .where("type", "=", "Contact")
+        .executeTakeFirst();
 
       if (!contact) return null;
 
-      const { remoteJid: id, name: savedName, pushName } = contact;
+      const { remote_jid: id, saved_name: savedName, server_name: pushName } = contact;
 
       return { type: "private", id, savedName, pushName };
     }
@@ -444,57 +462,121 @@ export class Messages {
     return null;
   }
 
-  async saveChatToDatabase(force: boolean = false): Promise<GroupMetadata | string | null> {
+  async saveChatToDatabase(force_save: boolean = false): Promise<GroupMetadata | string | null> {
     if (!this.remoteJid) return null;
 
     if (!this.client.socket) throw new Error("Socket isn't initialized yet!");
 
-    if ((await this.getChatFromDatabase()) && !force) return null;
+    if (!force_save && (await this.getChatFromDatabase())) return null;
 
     if (this.chatType === "group") {
       const metadata = await this.client.socket.groupMetadata(this.remoteJid);
-      const { id: remoteJid, owner, subjectTime, creation, participants, descId: _, ...groupMetadata } = metadata;
+      const {
+        id: remote_jid,
+        owner,
+        subject,
+        subjectTime: subject_time,
+        subjectOwner: subject_owner,
+        desc,
+        descOwner: desc_owner,
+        creation,
+        participants,
+        author, // What is this again???
+        announce,
+        restrict,
+        joinApprovalMode: join_approval_mode,
+        linkedParent: linked_parent,
+        memberAddMode: member_add_mode,
+        size,
+        isCommunity: is_community,
+        isCommunityAnnounce: is_community_announce,
+        ephemeralDuration: ephemeral_duration,
+        inviteCode: invite_code,
+        descId: _,
+      } = metadata;
 
-      await botDatabase.group.upsert({
-        create: {
-          ...groupMetadata,
+      const insertedEntity = await postgresDb
+        .insertInto("entity")
+        .values({ creds_name: this.sessionName, remote_jid, type: "Group" })
+        .onConflict((oc) => oc.constraint("entity_remote_jid_and_creds_name").doNothing())
+        .returning(["id"])
+        .executeTakeFirst();
+
+      if (!insertedEntity) return metadata; // Entity already inserted
+
+      const insertedGroup = await postgresDb
+        .insertInto("group")
+        .values({
+          id: insertedEntity.id,
           owner: owner ?? "",
-          remoteJid,
-          credsName: this.client.sessionName,
-          subjectTime: subjectTime ? new Date(subjectTime * 1000) : new Date(),
-          creation: creation ? new Date(creation * 1000) : new Date(),
-          participants: {
-            createMany: {
-              data: participants.map((part) => {
-                return {
-                  participantJid: part.id,
-                  role: part.admin === "admin" ? "ADMIN" : part.admin === "superadmin" ? "SUPERADMIN" : "MEMBER",
-                };
-              }),
-            },
-          },
-        },
-        where: { credsName_remoteJid: { credsName: this.client.sessionName, remoteJid: this.remoteJid } },
-        update: { ...groupMetadata },
-      });
+          subject,
+          subject_time: subject_time ? new Date(subject_time) : null,
+          subject_owner,
+          desc,
+          desc_owner,
+          creation: creation ? new Date(creation) : null,
+          announce,
+          restrict,
+          join_approval_mode,
+          linked_parent,
+          member_add_mode,
+          size,
+          is_community,
+          is_community_announce,
+          ephemeral_duration,
+          invite_code,
+        })
+        .onConflict((oc) => oc.constraint("group_pk").doNothing())
+        .returning(["id"])
+        .executeTakeFirst();
+
+      if (!insertedGroup) return metadata; // Group already inserted
+
+      await postgresDb
+        .insertInto("participant")
+        .values(
+          participants.map((p) => ({
+            group_id: insertedGroup.id,
+            participant_jid: p.id,
+            role: participantRoleToEnum(p.admin),
+          }))
+        )
+        .onConflict((oc) =>
+          oc.columns(["group_id", "participant_jid"]).doUpdateSet((cb) => ({ role: cb.ref("excluded.role") }))
+        )
+        .execute();
 
       return metadata;
     }
 
-    if (this.chatType === "private") {
-      await botDatabase.contact.upsert({
-        create: { credsName: this.client.sessionName, remoteJid: this.remoteJid, pushName: this.message.pushName },
-        where: { credsName_remoteJid: { credsName: this.client.sessionName, remoteJid: this.remoteJid } },
-        update: { pushName: this.message.pushName },
-      });
+    if (this.chatType === "private" || this.remoteJid === "status@broadcast") {
+      const insertedEntity = await postgresDb
+        .insertInto("entity")
+        .values({
+          creds_name: this.sessionName,
+          remote_jid: this.from,
+          type: "Contact",
+        })
+        .onConflict((oc) => oc.constraint("entity_remote_jid_and_creds_name").doNothing())
+        .returning(["id"])
+        .executeTakeFirst();
+
+      if (!insertedEntity) return this.message.pushName ?? "";
+
+      await postgresDb
+        .insertInto("contact")
+        .values({
+          id: insertedEntity.id,
+          server_name: this.message.pushName ?? "Unknown.",
+          saved_name: this.message.pushName ?? "Unknown.",
+        })
+        .onConflict((oc) => oc.columns(["id"]).doUpdateSet({ server_name: this.message.pushName ?? "" }))
+        .execute();
 
       return this.message.pushName ?? "";
     }
 
-    writeFileSync(
-      `json/chat_${this.remoteJid}.json`,
-      `Unhandled chatType ${this.chatType} for remoteJid ${this.remoteJid}`
-    );
+    writeFileSync(`json/chat_${this.remoteJid}.json`, `Unhandled chatType ${this.chatType} for remoteJid ${this.remoteJid}`);
 
     return null;
   }
@@ -510,11 +592,16 @@ export class Messages {
 
     if (!id) return null;
 
-    const message = await botDatabase.message.findUnique({
-      where: { messageId_remoteJid_credsName: { messageId: id, remoteJid: chat, credsName: this.client.sessionName } },
-    });
+    const message = await postgresDb
+      .selectFrom("message as m")
+      .select("message")
+      .innerJoin("entity as e", "e.id", "m.entity_id")
+      .where("m.message_id", "=", id)
+      .where("e.remote_jid", "=", chat)
+      .where("e.creds_name", "=", this.sessionName)
+      .execute();
 
-    return message ? new Messages(this.client, JSON.parse(message.message)) : null;
+    return message[0] ? new Messages(this.client, JSON.parse(message[0].message)) : null;
   }
 
   async saveMessage(opts: { dismissChat: boolean } = { dismissChat: false }): Promise<boolean> {
@@ -523,7 +610,11 @@ export class Messages {
     }
 
     if (!opts.dismissChat) {
-      await this.saveChatToDatabase();
+      try {
+        await this.saveChatToDatabase();
+      } catch (err) {
+        writeErrorToFile(err, "src.utils.classes.message.saveMessage.saveChat");
+      }
     }
 
     const msg = this.raw.message?.protocolMessage;
@@ -531,45 +622,49 @@ export class Messages {
     if (msg && msg.type === proto.Message.ProtocolMessage.Type.REVOKE) {
       this.client.caches[`delete-${this.remoteJid}-${msg.key?.id ?? ""}`] = true;
       try {
-        await botDatabase.message.update({
-          where: {
-            messageId_remoteJid_credsName: {
-              credsName: this.sessionName,
-              messageId: msg.key?.id ?? "",
-              remoteJid: this.remoteJid,
-            },
-          },
-          data: { deleted: true },
-        });
+        await postgresDb
+          .updateTable("message as m")
+          .set({ deleted: true })
+          .from("entity as e")
+          .where("m.message_id", "=", this.msgKey.id ?? "")
+          .where("e.remote_jid", "=", this.remoteJid === "status@broadcast" ? this.from : this.remoteJid ?? "")
+          .where("e.creds_name", "=", this.sessionName)
+          .execute();
       } catch (err) {
         if (err instanceof PrismaClientKnownRequestError && err.code !== "P2025") {
           writeErrorToFile(err);
         } else {
-          console.warn("Message is not saved yet.");
+          writeErrorToFile(err, "src.utils.classes.message.saveMessage.deleted");
         }
 
         return false;
       }
     } else {
-      await botDatabase.message.upsert({
-        create: {
-          credsName: this.sessionName,
-          messageId: this.id,
-          remoteJid: this.remoteJid,
-          message: JSON.stringify(this.message),
-          deleted: this.client.caches[`delete-${this.remoteJid}-${this.id}`] === true,
-        },
-        where: {
-          messageId_remoteJid_credsName: { credsName: this.sessionName, messageId: this.id, remoteJid: this.remoteJid },
-        },
-        update: {
-          message: JSON.stringify(this.message),
-          deleted: this.client.caches[`delete-${this.remoteJid}-${this.id}`] === true,
-        },
-      });
+      try {
+        await postgresDb
+          .insertInto("message")
+          .values(({ selectFrom }) => ({
+            entity_id: selectFrom("entity as e")
+              .select("e.id")
+              .where("e.remote_jid", "=", this.remoteJid === "status@broadcast" ? this.from : this.remoteJid ?? "")
+              .where("e.creds_name", "=", this.sessionName),
+            message: JSON.stringify(this.message),
+            message_id: this.id ?? "",
+            deleted: this.client.caches[`delete-${this.remoteJid}-${this.id}`] === true,
+          }))
+          .onConflict((oc) =>
+            oc.constraint("message_entity_id").doUpdateSet({
+              message: JSON.stringify(this.message),
+              deleted: this.client.caches[`delete-${this.remoteJid}-${this.id}`] === true,
+            })
+          )
+          .execute();
 
-      if (this.client.caches[`delete-${this.remoteJid}-${this.id}`] === true) {
-        delete this.client.caches[`delete-${this.remoteJid}-${this.id}`];
+        if (this.client.caches[`delete-${this.remoteJid}-${this.id}`] === true) {
+          delete this.client.caches[`delete-${this.remoteJid}-${this.id}`];
+        }
+      } catch (err) {
+        writeErrorToFile(err, "src.utils.classes.message.saveMessage.upsertMessage");
       }
     }
 
@@ -577,19 +672,18 @@ export class Messages {
   }
 
   static async getMessage(client: Client, remoteJid: string, messageId: string): Promise<Messages | null> {
-    const message = await botDatabase.message.findUnique({
-      where: {
-        messageId_remoteJid_credsName: {
-          messageId,
-          remoteJid,
-          credsName: client.sessionName,
-        },
-      },
-    });
+    const message = await postgresDb
+      .selectFrom("message as m")
+      .select("message")
+      .innerJoin("entity as e", "e.id", "m.entity_id")
+      .where("e.creds_name", "=", client.sessionName)
+      .where("e.remote_jid", "=", remoteJid)
+      .where("m.message_id", "=", messageId)
+      .execute();
 
-    if (!message) return null;
+    if (message.length !== 1) return null;
 
-    return new Messages(client, JSON.parse(message.message));
+    return new Messages(client, JSON.parse(message[0].message));
   }
 
   // Message utilities
@@ -614,11 +708,7 @@ export class Messages {
       throw new Error("Socket isn't initialized yet!");
     }
 
-    return await this.client.socket.sendMessage(
-      this.chat,
-      { text: newMessage, edit: this.msgKey },
-      { quoted: this.raw }
-    );
+    return await this.client.socket.sendMessage(this.chat, { text: newMessage, edit: this.msgKey }, { quoted: this.raw });
   }
 
   async handle(handler: MessageHandlerType) {

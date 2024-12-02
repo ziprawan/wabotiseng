@@ -1,5 +1,5 @@
+import { postgresDb } from "@/database/client";
 import { CommandHandlerFunc } from "@/types/command/handler";
-import { botDatabase } from "@/utils/database/client";
 import { writeErrorToFile } from "@/utils/error/write";
 import { streamToBuffer } from "@/utils/stream/toBuffer";
 import { downloadEncryptedContent, getMediaKeys } from "@whiskeysockets/baileys";
@@ -17,7 +17,11 @@ export const viewOnceCommandHandler: CommandHandlerFunc = async ({ sock, msg }) 
 
   const viewOnceMessage = resolvedReply.viewOnceMessage;
   if (!viewOnceMessage) {
-    return await sock.sendMessage(msg.chat, { text: "The replied message is not a view once message!" }, { quoted: msg.raw });
+    return await sock.sendMessage(
+      msg.chat,
+      { text: "The replied message is not a view once message!" },
+      { quoted: msg.raw }
+    );
   }
 
   const mediaMessage = viewOnceMessage.audio ?? viewOnceMessage.video ?? viewOnceMessage.image ?? undefined;
@@ -46,8 +50,8 @@ export const viewOnceCommandHandler: CommandHandlerFunc = async ({ sock, msg }) 
             ...(mediaType === "image"
               ? { image: mediaBuffer }
               : mediaType === "video"
-                ? { video: mediaBuffer }
-                : { audio: mediaBuffer }),
+              ? { video: mediaBuffer }
+              : { audio: mediaBuffer }),
           },
           { quoted: msg.raw }
         );
@@ -59,18 +63,17 @@ export const viewOnceCommandHandler: CommandHandlerFunc = async ({ sock, msg }) 
     }
   }
 
-  const request = await botDatabase.requestViewOnce.findUnique({
-    where: {
-      messageId_chatId_credsName: {
-        messageId: resolvedReply.id ?? "",
-        chatId: resolvedReply.remoteJid ?? "",
-        credsName: msg.client.sessionName,
-      },
-    },
-  });
+  const request = await postgresDb
+    .selectFrom("request_view_once as rvo")
+    .select(["accepted", "requested_by"])
+    .innerJoin("entity as e", "e.id", "rvo.entity_id")
+    .where("rvo.message_id", "=", resolvedReply.id ?? "")
+    .where("e.remote_jid", "=", resolvedReply.remoteJid ?? "")
+    .where("e.creds_name", "=", msg.sessionName)
+    .executeTakeFirst();
 
   if (request) {
-    const requestedBy = request.requestedBy;
+    const requestedBy = request.requested_by;
     const requestedNumber = requestedBy.split("@")[0];
 
     return await sock.sendMessage(
@@ -98,13 +101,17 @@ export const viewOnceCommandHandler: CommandHandlerFunc = async ({ sock, msg }) 
     { quoted: msg.raw }
   );
 
-  await botDatabase.requestViewOnce.create({
-    data: {
-      messageId: resolvedReply.id,
-      confirmId: sent?.key.id ?? "",
-      chatId: resolvedReply.remoteJid,
-      credsName: msg.sessionName,
-      requestedBy: msg.from,
-    },
-  });
+  await postgresDb
+    .insertInto("request_view_once")
+    .values(({ selectFrom }) => ({
+      message_id: resolvedReply.id ?? "",
+      confirm_id: sent?.key.id ?? "",
+      entity_id: selectFrom("entity as e")
+        .select("e.id")
+        .where("e.creds_name", "=", msg.sessionName)
+        .where("e.remote_jid", "=", resolvedReply.remoteJid ?? ""),
+      requested_by: msg.from,
+    }))
+    .onConflict((oc) => oc.columns(["confirm_id", "message_id", "entity_id"]).doNothing())
+    .execute();
 };

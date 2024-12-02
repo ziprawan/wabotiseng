@@ -1,13 +1,10 @@
+import { Client } from "@/client";
+import { postgresDb } from "@/database/client";
 import { proto } from "@whiskeysockets/baileys";
 import { Messages } from "./message";
-import { botDatabase } from "../database/client";
-import { Client } from "@/client";
 
 export class ReactionClass {
-  constructor(
-    private reactionMessage: proto.IReaction,
-    private client: Client
-  ) {}
+  constructor(private reactionMessage: proto.IReaction, private client: Client) {}
 
   get content(): string {
     return this.reactionMessage.text ?? "";
@@ -31,18 +28,17 @@ export class ReactionClass {
 
   // Will return null if message not found on database
   async resolveReactedMessage(): Promise<Messages | null> {
-    const foundMessage = await botDatabase.message.findUnique({
-      where: {
-        messageId_remoteJid_credsName: {
-          messageId: this.msgId ?? "",
-          remoteJid: this.remoteJid ?? "",
-          credsName: this.client.sessionName,
-        },
-      },
-    });
+    const foundMessage = await postgresDb
+      .selectFrom("message as m")
+      .select("message")
+      .innerJoin("entity as e", "e.id", "m.entity_id")
+      .where("e.creds_name", "=", this.client.sessionName)
+      .where("e.remote_jid", "=", this.remoteJid ?? "")
+      .where("m.message_id", "=", this.msgId ?? "")
+      .execute();
 
-    if (!foundMessage) return null;
+    if (foundMessage.length !== 1) return null;
 
-    return new Messages(this.client, JSON.parse(foundMessage.message));
+    return new Messages(this.client, JSON.parse(foundMessage[0].message));
   }
 }

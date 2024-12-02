@@ -8,7 +8,8 @@ import { sleep } from "@/utils/sleep";
 import { Boom } from "@hapi/boom";
 import makeWASocket, { BinaryNode, ConnectionState, DisconnectReason, WASocket } from "@whiskeysockets/baileys";
 import { CronJob } from "cron";
-import NodeCache, { EventEmitter } from "node-cache";
+import NodeCache from "node-cache";
+import { EventEmitter } from "node:events";
 import Pino from "pino";
 
 const Logger = Pino({

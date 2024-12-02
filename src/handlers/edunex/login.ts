@@ -1,5 +1,5 @@
+import { postgresDb } from "@/database/client";
 import { CommandHandlerFunc } from "@/types/command/handler";
-import { botDatabase } from "@/utils/database/client";
 import { EdunexAPI } from "@/utils/edunex/api";
 
 const EDUNEX_NOT_LOGGED_IN_MSG = `
@@ -27,14 +27,14 @@ export const edunexLoginHandler: CommandHandlerFunc = async ({ msg, parser, sock
 
   const { args } = parser;
 
-  const savedSettings = await botDatabase.edunexAccount.findUnique({
-    where: {
-      userId_credsName: {
-        userId: msg.from,
-        credsName: msg.sessionName,
-      },
-    },
-  });
+  const savedSettings = await postgresDb
+    .selectFrom("edunex_account as ea")
+    .select(["ea.token", "ea.id"])
+    .innerJoin("contact as c", "c.id", "ea.user_id")
+    .innerJoin("entity as e", "e.id", "c.id")
+    .where("ea.creds_name", "=", msg.sessionName)
+    .where("e.remote_jid", "=", msg.from)
+    .executeTakeFirst();
 
   if (args.length === 1) {
     if (savedSettings) {
@@ -42,11 +42,7 @@ export const edunexLoginHandler: CommandHandlerFunc = async ({ msg, parser, sock
       const me = await edunex.getMe();
 
       if (typeof me === "string") {
-        await botDatabase.edunexAccount.delete({
-          where: {
-            id: savedSettings.id,
-          },
-        });
+        await postgresDb.deleteFrom("edunex_account as ea").where("ea.id", "=", savedSettings.id).execute();
         return await msg.replyText("Invalid token! Logging out...");
       }
 
@@ -71,13 +67,11 @@ export const edunexLoginHandler: CommandHandlerFunc = async ({ msg, parser, sock
     return await msg.replyText("Invalid token! Please try again.");
   }
 
-  await botDatabase.edunexAccount.create({
-    data: {
-      token: token.content,
-      credsName: msg.sessionName,
-      userId: msg.from,
-    },
-  });
+  await postgresDb.insertInto("edunex_account").values(({ selectFrom }) => ({
+    token: token.content,
+    creds_name: msg.sessionName,
+    user_id: selectFrom("entity as e").select("e.id").where("e.creds_name", "=", msg.from).where("e.type", "=", "Contact"),
+  }));
 
   return await msg.replyText("Berhasil login ke akun Edunex sebagai " + me.name);
 };

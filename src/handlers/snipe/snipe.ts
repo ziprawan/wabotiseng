@@ -1,29 +1,24 @@
-import { CommandHandlerFunc } from "@/types/command/handler";
+import { postgresDb } from "@/database/client";
 import { WASocket } from "@/types/socket";
 import { Messages } from "@/utils/classes/message";
-import { botDatabase } from "@/utils/database/client";
-import {
-  AnyMessageContent,
-  downloadMediaMessage,
-  getContentType,
-  jidDecode,
-  jidNormalizedUser,
-  MediaType,
-} from "@whiskeysockets/baileys";
+import { AnyMessageContent, downloadMediaMessage, getContentType, jidDecode, MediaType } from "@whiskeysockets/baileys";
 
 export const snipeHandler = async ({ msg, sock }: { msg: Messages; sock: WASocket }) => {
-  const found = await botDatabase.message.findFirst({
-    where: { deleted: true, remoteJid: msg.chat, credsName: msg.sessionName },
-    orderBy: { createdAt: "desc" },
-  });
+  const found = await postgresDb
+    .selectFrom("message as m")
+    .select(["m.message", "m.id"])
+    .innerJoin("entity as e", "e.id", "m.entity_id")
+    .where("m.deleted", "=", true)
+    .where("e.remote_jid", "=", msg.chat)
+    .where("e.creds_name", "=", msg.sessionName)
+    .executeTakeFirst();
 
   if (!found) {
-    console.log("Aneh");
-    return;
+    return msg.replyText("No more deleted message found!", true);
   }
 
   const snipeMessage = new Messages(msg.client, JSON.parse(found.message));
-  await botDatabase.message.update({ where: { id: found.id }, data: { deleted: null } });
+  await postgresDb.updateTable("message").set({ deleted: null }).where("id", "=", found.id).execute();
 
   try {
     const mediaBuffer = await downloadMediaMessage(
@@ -84,7 +79,7 @@ export const snipeHandler = async ({ msg, sock }: { msg: Messages; sock: WASocke
     }
 
     if (content === null) {
-      return await msg.replyText("[SP004] Unable to determine media type!", true);
+      return await msg.replyText("[SNP004] Unable to determine media type!", true);
     }
 
     return await sock.sendMessage(msg.chat, content, { quoted: msg.raw });

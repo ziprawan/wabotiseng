@@ -1,9 +1,9 @@
 import * as fs from "fs";
 
 export class FileLogger {
-  constructor(private name: string) {}
+  constructor(private name: string, private folder?: string) {}
 
-  private stream = fs.createWriteStream("logs/" + this.name + `-${Date.now()}.log`, { flags: "w" });
+  private stream = fs.createWriteStream(`${this.folder ?? "logs"}/${Date.now()}-${this.name}.log`, { flags: "w" });
   private logs: string[] = [];
 
   write(message: string) {

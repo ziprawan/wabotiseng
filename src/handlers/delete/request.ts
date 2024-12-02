@@ -1,6 +1,6 @@
+import { postgresDb } from "@/database/client";
 import { CommandHandlerFunc } from "@/types/command/handler";
 import { Messages } from "@/utils/classes/message";
-import { botDatabase } from "@/utils/database/client";
 import { jidNormalizedUser } from "@whiskeysockets/baileys";
 
 export const MINIMUM_ACCEPTS = 5;
@@ -30,24 +30,25 @@ export const deleteHandler: CommandHandlerFunc = async (ctx) => {
     return await msg.replyText("Message not found.");
   }
 
-  const request = await botDatabase.requestDeleteMessage.findUnique({
-    where: {
-      messageId_chatId_credsName: {
-        messageId: resolvedReply.id ?? "",
-        chatId: resolvedReply.remoteJid ?? "",
-        credsName: msg.client.sessionName,
-      },
-    },
-  });
+  const request = await postgresDb
+    .selectFrom("request_delete_message as rdm")
+    .select(["rdm.requested_by", "rdm.done"])
+    .innerJoin("entity as e", "e.id", "rdm.entity_id")
+    .where("rdm.message_id", "=", resolvedReply.id ?? "")
+    .where("e.remote_jid", "=", resolvedReply.chat)
+    .where("e.creds_name", "=", msg.sessionName)
+    .executeTakeFirst();
 
   if (request) {
-    const requestedBy = request.requestedBy;
+    const requestedBy = request.requested_by;
     const requestedNumber = requestedBy.split("@")[0];
 
     return await sock.sendMessage(
       msg.chat,
       {
-        text: request.done ? `That message already deleted` : `That message deletion already requested by @${requestedNumber}`,
+        text: request.done
+          ? `That message already deleted`
+          : `That message deletion already requested by @${requestedNumber}`,
         mentions: [requestedBy],
       },
       { quoted: msg.raw }
@@ -66,13 +67,16 @@ export const deleteHandler: CommandHandlerFunc = async (ctx) => {
 
   const confirmMsg = new Messages(msg.client, rawConfirmMsg);
 
-  await botDatabase.requestDeleteMessage.create({
-    data: {
-      messageId: resolvedReply.id ?? "",
-      chatId: resolvedReply.remoteJid ?? "",
-      credsName: msg.client.sessionName,
-      requestedBy: msg.from,
-      confirmId: confirmMsg.id ?? "",
-    },
-  });
+  await postgresDb
+    .insertInto("request_delete_message")
+    .values(({ selectFrom }) => ({
+      message_id: resolvedReply.id ?? "",
+      entity_id: selectFrom("entity as e")
+        .select("e.id")
+        .where("e.remote_jid", "=", resolvedReply.remoteJid ?? "")
+        .where("e.creds_name", "=", msg.sessionName),
+      requested_by: msg.from,
+      confirm_id: confirmMsg.id ?? "",
+    }))
+    .execute();
 };
