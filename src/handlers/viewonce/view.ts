@@ -1,15 +1,16 @@
 import { postgresDb } from "@/database/client";
 import { CommandHandlerFunc } from "@/types/command/handler";
 import { writeErrorToFile } from "@/utils/error/write";
+import { FileLogger } from "@/utils/logger/file";
 import { streamToBuffer } from "@/utils/stream/toBuffer";
-import { downloadEncryptedContent, getMediaKeys } from "@whiskeysockets/baileys";
+import { BufferJSON, downloadEncryptedContent, getMediaKeys } from "@whiskeysockets/baileys";
 
 export const viewOnceCommandHandler: CommandHandlerFunc = async ({ sock, msg }) => {
   if (!msg.reply_to_message) {
     return await msg.replyText("Please reply to a message that you want to view a view once message!", true);
   }
 
-  const resolvedReply = await msg.resolveReplyToMessage();
+  const resolvedReply = await msg.resolveReplyToMessage(true);
 
   if (!resolvedReply) {
     return await sock.sendMessage(msg.chat, { text: "Message not found." }, { quoted: msg.raw });

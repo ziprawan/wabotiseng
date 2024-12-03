@@ -37,23 +37,27 @@ export class FileLogger {
   }
 
   verbose(message: string) {
-    if (this.loglevel > 0) return;
+    if (this.loglevel > 0) return this;
     this._writeFormattedLog("verbose", message);
+    return this;
   }
 
   info(message: string) {
-    if (this.loglevel > 1) return;
+    if (this.loglevel > 1) return this;
     this._writeFormattedLog("info", message);
+    return this;
   }
 
   warning(message: string) {
-    if (this.loglevel > 2) return;
+    if (this.loglevel > 2) return this;
     this._writeFormattedLog("warning", message);
+    return this;
   }
 
   error(message: string) {
-    if (this.loglevel > 3) return;
+    if (this.loglevel > 3) return this;
     this._writeFormattedLog("error", message);
+    return this;
   }
 
   get text() {
