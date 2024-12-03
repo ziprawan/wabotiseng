@@ -1,9 +1,8 @@
 import { postgresDb } from "@/database/client";
 import { CommandHandlerFunc } from "@/types/command/handler";
 import { writeErrorToFile } from "@/utils/error/write";
-import { FileLogger } from "@/utils/logger/file";
 import { streamToBuffer } from "@/utils/stream/toBuffer";
-import { BufferJSON, downloadEncryptedContent, getMediaKeys } from "@whiskeysockets/baileys";
+import { downloadEncryptedContent, getMediaKeys } from "@whiskeysockets/baileys";
 
 export const viewOnceCommandHandler: CommandHandlerFunc = async ({ sock, msg }) => {
   if (!msg.reply_to_message) {
@@ -16,7 +15,13 @@ export const viewOnceCommandHandler: CommandHandlerFunc = async ({ sock, msg }) 
     return await sock.sendMessage(msg.chat, { text: "Message not found." }, { quoted: msg.raw });
   }
 
-  const viewOnceMessage = resolvedReply.viewOnceMessage;
+  let viewOnceMessage = resolvedReply.viewOnceMessage;
+
+  if (!viewOnceMessage && msg.reply_to_message.viewOnceMessage) {
+    await msg.reply_to_message.saveMessage({ dismissChat: true });
+    viewOnceMessage = msg.reply_to_message;
+  }
+
   if (!viewOnceMessage) {
     return await sock.sendMessage(
       msg.chat,
