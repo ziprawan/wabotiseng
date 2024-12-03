@@ -118,6 +118,7 @@ export const viewOnceCommandHandler: CommandHandlerFunc = async ({ sock, msg }) 
         .where("e.remote_jid", "=", resolvedReply.remoteJid ?? ""),
       requested_by: msg.from,
     }))
-    .onConflict((oc) => oc.columns(["confirm_id", "message_id", "entity_id"]).doNothing())
+    .onConflict((oc) => oc.columns(["confirm_id", "entity_id"]).doNothing())
+    .onConflict((oc) => oc.columns(["message_id", "entity_id"]).doNothing())
     .execute();
 };
