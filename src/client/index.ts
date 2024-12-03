@@ -26,13 +26,18 @@ export class Client extends EventEmitter {
   /**
    * @constructor
    */
-  constructor(sessionName: string, private maxReconnectFails: number = 5) {
+  constructor(sessionName: string, private maxReconnectFails: number = 5, public runtimeLogger: FileLogger) {
     super();
+    this.runtimeLogger.verbose("src > client > Client > constructor called!");
+    runtimeLogger.info("Initializing client");
+    runtimeLogger.verbose(`Client sessionName: ${sessionName}`);
 
     this.sessionName = sessionName;
     this.reconnectFail = 0;
     this.logger = logger;
     this.caches = {};
+
+    runtimeLogger.verbose("Client class constructored!");
   }
 
   public sessionName: string;
@@ -57,6 +62,7 @@ export class Client extends EventEmitter {
    * @return {Client}
    */
   addEventHandler<T extends BaileysEventList>(event: T, func: EventHandlerFunc<T>): Client {
+    this.runtimeLogger.verbose("src > client > Client > addEventHandler called!");
     this.#handlers.add({
       event,
       func: func as EventHandlerFunc<BaileysEventList>,
@@ -73,6 +79,7 @@ export class Client extends EventEmitter {
    * @return {Client}
    */
   addWSHandler(event: string, func: WSHandlerFunc): Client {
+    this.runtimeLogger.verbose("src > client > Client > addWSHandler called!");
     this.#wsHandlers.add({
       event,
       func,
@@ -85,19 +92,24 @@ export class Client extends EventEmitter {
    * @return {void}
    */
   async wait(): Promise<void> {
+    this.runtimeLogger.verbose("src > client > Client > wait called!");
     this.reconnectFail++;
+    this.runtimeLogger.verbose(`Increasing reconnectFail to ${this.reconnectFail}`);
 
     if (this.reconnectFail >= this.maxReconnectFails) {
       // Crash the program to save memory usage >:(
       console.error(`Max reconnect fails reached! Exiting...`);
+      this.runtimeLogger.error("Max reconnect fails reached! Exiting");
       process.exit();
     }
 
+    this.runtimeLogger.verbose("Sleeping for 3000 ms");
     await sleep(3000);
     return;
   }
 
   addCron(name: string, cronTime: string | Date, func: CronFunc): Client {
+    this.runtimeLogger.verbose("src > client > Client > addCron called!");
     this.#crons.add({ name, cronTime, func });
     return this;
   }
@@ -108,40 +120,46 @@ export class Client extends EventEmitter {
    * @param removeCreds Function to remove the credentials when loggedOut
    */
   async updateConnection(ev: Partial<ConnectionState>, removeCreds: () => Promise<void>) {
+    this.runtimeLogger.verbose("src > client > Client > updateConnection called!");
     const { lastDisconnect, connection } = ev;
     const reason = new Boom(lastDisconnect?.error).output.statusCode;
+    this.runtimeLogger.verbose(`Got reason: ${reason}`);
 
     if (connection === "close") {
+      this.runtimeLogger.warning('Connection to server state is "close"!');
       if (reason === DisconnectReason.badSession) {
-        logger.error(`Bad Session, Please Delete /auth and Scan Again`);
+        this.runtimeLogger.error("Bad session, please delete your session from database!");
         process.exit();
       } else if (reason === DisconnectReason.connectionClosed) {
         await this.wait();
-        logger.warn("Connection closed, reconnecting....");
+        this.runtimeLogger.warning("Connection closed, reconnecting");
         await this.launch();
       } else if (reason === DisconnectReason.connectionLost) {
         await this.wait();
-        logger.warn("Connection Lost from Server, reconnecting...");
+        this.runtimeLogger.warning("Connection lost from server, reconnecting");
         await this.launch();
       } else if (reason === DisconnectReason.connectionReplaced) {
+        this.runtimeLogger.error("Another session opened! Exiting");
         logger.error("Connection Replaced, Another New Session Opened, Please Close Current Session First");
         process.exit();
       } else if (reason === DisconnectReason.loggedOut) {
-        logger.error(`Device Logged Out, Proceed to delete your credentials!`);
+        this.runtimeLogger.error("Device logged out, procees to delete your credentials!");
         await removeCreds();
         process.exit();
       } else if (reason === DisconnectReason.restartRequired) {
-        logger.info("Restart Required, Restarting...");
+        this.runtimeLogger.info("Restart is required, restarting");
         await this.launch();
       } else if (reason === DisconnectReason.timedOut) {
         await this.wait();
-        logger.warn("Connection TimedOut, Reconnecting...");
+        this.runtimeLogger.warning("Connection timed out, reconnecting");
         await this.launch();
       } else {
+        this.runtimeLogger.warning(`Unknown disconnect reason: ${reason}: ${connection}`);
         logger.warn(`Unknown DisconnectReason: ${reason}: ${connection}`);
         await this.launch();
       }
     } else if (connection === "open") {
+      this.runtimeLogger.info("Connection opened!");
       logger.info("Connection opened.");
     }
   }
@@ -151,6 +169,8 @@ export class Client extends EventEmitter {
    * @returns {Promise<void>}
    */
   async launch(): Promise<void> {
+    this.runtimeLogger.verbose("src > client > Client > launch called!");
+    this.runtimeLogger.verbose("Initializing database auth and WA Socket");
     this.session = await useDatabaseAuthState(this.sessionName);
     this.socket = makeWASocket({
       auth: this.session.state,
@@ -160,6 +180,7 @@ export class Client extends EventEmitter {
       msgRetryCounterCache,
     });
 
+    this.runtimeLogger.verbose(`Adding all ${this.#crons.size} cron jobs`);
     this.#crons.forEach((value) => {
       const fileLogger = new FileLogger(value.name);
       CronJob.from({
@@ -177,6 +198,7 @@ export class Client extends EventEmitter {
       });
     });
 
+    this.runtimeLogger.verbose(`Adding all ${this.#handlers.size} event handlers`);
     this.#handlers.forEach((value) => {
       this.socket?.ev.on(value.event, (arg) => {
         if (!this.socket) {
@@ -190,6 +212,7 @@ export class Client extends EventEmitter {
       });
     });
 
+    this.runtimeLogger.verbose(`Adding all ${this.#wsHandlers.size} websocket handlers`);
     this.#wsHandlers.forEach((value) => {
       this.socket?.ws.on(value.event, (arg: BinaryNode) => {
         if (!this.socket) {
@@ -203,10 +226,12 @@ export class Client extends EventEmitter {
       });
     });
 
+    this.runtimeLogger.verbose("Adding creds.update default event handler");
     this.socket.ev.on("creds.update", async () => {
       await this.session?.saveCreds();
     });
 
+    this.runtimeLogger.verbose("Adding connection.update default event handler");
     this.socket.ev.on("connection.update", async (conn) => {
       await this.updateConnection(conn, this.session?.removeCreds ?? (async () => {}));
     });

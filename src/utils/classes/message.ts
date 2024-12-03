@@ -16,19 +16,21 @@ import {
 } from "@/types/whatsapp";
 import { ContactMessage } from "@/types/whatsapp/contact";
 import { MessageHandlerType, MessageType } from "@/types/whatsapp/message";
-import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
 import { getContentType, GroupMetadata, proto } from "@whiskeysockets/baileys";
-import { writeFileSync } from "node:fs";
 import { participantRoleToEnum } from "../enum/participant_role";
 import { writeErrorToFile } from "../error/write";
+import { FileLogger } from "../logger/file";
 import { ReactionClass } from "./reaction";
 
 export class Messages {
   constructor(client: Client, private message: proto.IWebMessageInfo) {
+    client.runtimeLogger.verbose("src > utils > classes > message > Messages > constructor called!");
+    this.runtimeLogger = client.runtimeLogger;
     this.client = client;
   }
 
   client: Client;
+  runtimeLogger: FileLogger;
 
   get remoteJid(): string | null | undefined {
     return this.message.key.remoteJid;
@@ -386,9 +388,17 @@ export class Messages {
   // Database utilities
 
   async getChatFromDatabase(): Promise<Chat | null> {
-    if (!this.remoteJid) return null;
+    this.runtimeLogger.verbose("src > utils > classes > message > Messages > getChatFromDatabase called!");
+
+    if (!this.remoteJid) {
+      this.runtimeLogger.warning("remoteJid is null or undefined, ignoring");
+      return null;
+    }
+    this.runtimeLogger.verbose(`remoteJid is ${this.remoteJid}`);
 
     if (this.chatType === "group") {
+      this.runtimeLogger.verbose('chatType is "group"');
+      this.runtimeLogger.verbose("Gathering chat data from database");
       const groupData = await postgresDb
         .selectFrom("entity as e")
         .innerJoin("group as g", "g.id", "e.id")
@@ -398,7 +408,12 @@ export class Messages {
         .where("type", "=", "Group")
         .executeTakeFirst();
 
-      if (!groupData) return null;
+      if (!groupData) {
+        this.runtimeLogger.info("Chat not found.");
+        return null;
+      }
+
+      this.runtimeLogger.info(`Chat found with subject: ${groupData.subject}. Returning data`);
 
       const {
         remote_jid: id,
@@ -443,6 +458,8 @@ export class Messages {
     }
 
     if (this.chatType === "private") {
+      this.runtimeLogger.verbose('chatType is "private"');
+      this.runtimeLogger.verbose("Gathering contact data from database");
       const contact = await postgresDb
         .selectFrom("entity as e")
         .innerJoin("contact as c", "c.id", "e.id")
@@ -452,24 +469,47 @@ export class Messages {
         .where("type", "=", "Contact")
         .executeTakeFirst();
 
-      if (!contact) return null;
+      if (!contact) {
+        this.runtimeLogger.info("Contact not found.");
+        return null;
+      }
+
+      this.runtimeLogger.info(`Contact found with name: ${contact.saved_name}. Returning contact name`);
 
       const { remote_jid: id, saved_name: savedName, server_name: pushName } = contact;
 
       return { type: "private", id, savedName, pushName };
     }
 
+    this.runtimeLogger.verbose(`Unhandled chatType: ${this.chatType}`);
+
     return null;
   }
 
   async saveChatToDatabase(force_save: boolean = false): Promise<GroupMetadata | string | null> {
-    if (!this.remoteJid) return null;
+    this.runtimeLogger.verbose("src > utils > classes > message > Messages > saveChatFromDatabase called!");
+    this.runtimeLogger.verbose("force_save: " + String(force_save));
 
-    if (!this.client.socket) throw new Error("Socket isn't initialized yet!");
+    if (!this.remoteJid) {
+      this.runtimeLogger.info("remoteJid is null or undefined, ignoring");
+      return null;
+    }
+    this.runtimeLogger.info(`remoteJid is ${this.remoteJid}`);
 
-    if (!force_save && (await this.getChatFromDatabase())) return null;
+    if (!this.client.socket) {
+      this.runtimeLogger.error("Socket isn't initialized! Throwing error");
+      throw new Error("Socket isn't initialized yet!");
+    }
+
+    if (!force_save && (await this.getChatFromDatabase())) {
+      this.runtimeLogger.info("Chat or contact already stored in database! Ignoring");
+      return null;
+    }
 
     if (this.chatType === "group") {
+      this.runtimeLogger.verbose('chatType is "group"');
+      this.runtimeLogger.verbose("Gathering group metadata from server");
+
       const metadata = await this.client.socket.groupMetadata(this.remoteJid);
       const {
         id: remote_jid,
@@ -495,6 +535,7 @@ export class Messages {
         descId: _,
       } = metadata;
 
+      this.runtimeLogger.info("Inserting new entity into database");
       const insertedEntity = await postgresDb
         .insertInto("entity")
         .values({ creds_name: this.sessionName, remote_jid, type: "Group" })
@@ -502,8 +543,13 @@ export class Messages {
         .returning(["id"])
         .executeTakeFirst();
 
-      if (!insertedEntity) return metadata; // Entity already inserted
+      if (!insertedEntity) {
+        // Entity already inserted
+        this.runtimeLogger.warning("Insert entity doesn't return id! Maybe entity already inserted before");
+        return metadata;
+      }
 
+      this.runtimeLogger.info("Inserting new group into database");
       const insertedGroup = await postgresDb
         .insertInto("group")
         .values({
@@ -530,8 +576,13 @@ export class Messages {
         .returning(["id"])
         .executeTakeFirst();
 
-      if (!insertedGroup) return metadata; // Group already inserted
+      if (!insertedGroup) {
+        // Group already inserted
+        this.runtimeLogger.warning("Insert group doesn't return id! Maybe group already inserted before");
+        return metadata;
+      }
 
+      this.runtimeLogger.info(`Inserting all new ${participants.length} participants into database`);
       await postgresDb
         .insertInto("participant")
         .values(
@@ -546,10 +597,18 @@ export class Messages {
         )
         .execute();
 
+      this.runtimeLogger.verbose("All done, returning metadata");
+
       return metadata;
     }
 
     if (this.chatType === "private" || this.remoteJid === "status@broadcast") {
+      this.runtimeLogger.verbose(`chatType is ${this.chatType}`);
+      if (this.remoteJid === "status@broadcast") {
+        this.runtimeLogger.verbose("remoteJid is status@broadcast, saving contact instead");
+      }
+
+      this.runtimeLogger.info("Inserting new entity into database");
       const insertedEntity = await postgresDb
         .insertInto("entity")
         .values({
@@ -561,8 +620,12 @@ export class Messages {
         .returning(["id"])
         .executeTakeFirst();
 
-      if (!insertedEntity) return this.message.pushName ?? "";
+      if (!insertedEntity) {
+        this.runtimeLogger.warning("Insert entity doesn't return id! Maybe entity already inserted before");
+        return this.message.pushName ?? "";
+      }
 
+      this.runtimeLogger.info("Inserting new contact into database");
       await postgresDb
         .insertInto("contact")
         .values({
@@ -573,10 +636,11 @@ export class Messages {
         .onConflict((oc) => oc.columns(["id"]).doUpdateSet({ server_name: this.message.pushName ?? "" }))
         .execute();
 
+      this.runtimeLogger.verbose("All done, returning contact name");
       return this.message.pushName ?? "";
     }
 
-    writeFileSync(`json/chat_${this.remoteJid}.json`, `Unhandled chatType ${this.chatType} for remoteJid ${this.remoteJid}`);
+    this.runtimeLogger.verbose(`Unhandled chatType ${this.chatType} with msgKey: ${JSON.stringify(this.msgKey)}`);
 
     return null;
   }
@@ -585,13 +649,25 @@ export class Messages {
    * Resolve the reply_to_message field from database
    * @returns {Messages | null}
    */
-  async resolveReplyToMessage(): Promise<Messages | null> {
-    if (!this.reply_to_message) return null;
+  async resolveReplyToMessage(force_save: boolean = false): Promise<Messages | null> {
+    this.runtimeLogger.verbose("src > utils > classes > message > Messages > resolveReplyToMessage called!");
+    this.runtimeLogger.verbose("force_save: " + String(force_save));
+
+    if (!this.reply_to_message) {
+      this.runtimeLogger.info("reply_to_message is undefined, retuning null");
+      return null;
+    }
+    this.runtimeLogger.info("Found reply_to_message, processing");
 
     const { id, chat } = this.reply_to_message;
 
-    if (!id) return null;
+    if (!id) {
+      this.runtimeLogger.warning("Couldn't get reply_to_message's id! Returning null");
+      return null;
+    }
+    this.runtimeLogger.verbose(`Got message id: ${id} and chat: ${chat}`);
 
+    this.runtimeLogger.info("Getting message from database");
     const message = await postgresDb
       .selectFrom("message as m")
       .select("message")
@@ -599,20 +675,41 @@ export class Messages {
       .where("m.message_id", "=", id)
       .where("e.remote_jid", "=", chat)
       .where("e.creds_name", "=", this.sessionName)
-      .execute();
+      .executeTakeFirst();
 
-    return message[0] ? new Messages(this.client, JSON.parse(message[0].message)) : null;
+    if (message) {
+      this.runtimeLogger.info("Message found from database! Returning new instance of Messages class");
+      return new Messages(this.client, JSON.parse(message.message));
+    } else {
+      this.runtimeLogger.info("Message not found from database! Saving message");
+      this.reply_to_message.saveMessage({ dismissChat: true });
+      return this.reply_to_message;
+    }
   }
 
+  /**
+   * Save message to database
+   * @param opts save message options. dissmissChat, set true if you don't want to save chat info
+   * @returns {boolean}
+   */
   async saveMessage(opts: { dismissChat: boolean } = { dismissChat: false }): Promise<boolean> {
+    this.runtimeLogger.verbose("src > utils > classes > message > Messages > saveMessage called!");
+    this.runtimeLogger.verbose(`opts: ${JSON.stringify(opts)}`);
+
     if (!this.remoteJid || !this.id) {
+      this.runtimeLogger.warning("remoteJid or id is null or undefined! Ignoring");
       return false;
     }
 
     if (!opts.dismissChat) {
+      this.runtimeLogger.info("Saving chat to database");
       try {
         await this.saveChatToDatabase();
       } catch (err) {
+        this.runtimeLogger.error(
+          "RUNTIME ERROR! Located at src > utils > classes > message > Messages > saveMessage > save chat"
+        );
+        this.runtimeLogger.error((err as Error).stack ?? (err as Error).message);
         writeErrorToFile(err, "src.utils.classes.message.saveMessage.saveChat");
       }
     }
@@ -620,8 +717,11 @@ export class Messages {
     const msg = this.raw.message?.protocolMessage;
 
     if (msg && msg.type === proto.Message.ProtocolMessage.Type.REVOKE) {
+      this.runtimeLogger.verbose("msg protocol type is REVOKE");
       this.client.caches[`delete-${this.remoteJid}-${msg.key?.id ?? ""}`] = true;
+
       try {
+        this.runtimeLogger.verbose("Updating message deleted state into true");
         await postgresDb
           .updateTable("message as m")
           .set({ deleted: true })
@@ -629,18 +729,28 @@ export class Messages {
           .where("m.message_id", "=", this.msgKey.id ?? "")
           .where("e.remote_jid", "=", this.remoteJid === "status@broadcast" ? this.from : this.remoteJid ?? "")
           .where("e.creds_name", "=", this.sessionName)
-          .execute();
-      } catch (err) {
-        if (err instanceof PrismaClientKnownRequestError && err.code !== "P2025") {
-          writeErrorToFile(err);
-        } else {
-          writeErrorToFile(err, "src.utils.classes.message.saveMessage.deleted");
-        }
+          .executeTakeFirstOrThrow();
 
+        delete this.client.caches[`delete-${this.remoteJid}-${msg.key?.id ?? ""}`];
+      } catch (err) {
+        this.runtimeLogger.error(
+          "RUNTIME ERROR! Located at src > utils > classes > message > Messages > saveMessage > update deleted state"
+        );
+        this.runtimeLogger.error((err as Error).stack ?? (err as Error).message);
+        writeErrorToFile(err, "src.utils.classes.message.saveMessage.deleted");
         return false;
       }
     } else {
       try {
+        if (!(["broadcast", "group", "private"] as ChatType[]).includes(this.chatType!)) {
+          this.runtimeLogger.verbose(`Unhandled chatType: ${this.chatType}`);
+          return false;
+        }
+
+        this.runtimeLogger.verbose("Inserting message to database");
+        this.runtimeLogger.verbose(
+          `Cache: delete-${this.remoteJid}-${this.id}=${this.client.caches[`delete-${this.remoteJid}-${this.id}`]}`
+        );
         await postgresDb
           .insertInto("message")
           .values(({ selectFrom }) => ({
@@ -664,6 +774,10 @@ export class Messages {
           delete this.client.caches[`delete-${this.remoteJid}-${this.id}`];
         }
       } catch (err) {
+        this.runtimeLogger.error(
+          "RUNTIME ERROR! Located at src > utils > classes > message > Messages > saveMessage > save message"
+        );
+        this.runtimeLogger.error((err as Error).stack ?? (err as Error).message);
         writeErrorToFile(err, "src.utils.classes.message.saveMessage.upsertMessage");
       }
     }
@@ -672,6 +786,11 @@ export class Messages {
   }
 
   static async getMessage(client: Client, remoteJid: string, messageId: string): Promise<Messages | null> {
+    client.runtimeLogger.verbose("src > utils > classes > message > Messages > getMessage (static) called!");
+    client.runtimeLogger.verbose(`remoteJid: ${remoteJid}`);
+    client.runtimeLogger.verbose(`messageId: ${messageId}`);
+
+    client.runtimeLogger.info(`Getting message from database`);
     const message = await postgresDb
       .selectFrom("message as m")
       .select("message")
@@ -681,41 +800,67 @@ export class Messages {
       .where("m.message_id", "=", messageId)
       .execute();
 
-    if (message.length !== 1) return null;
+    if (message.length !== 1) {
+      client.runtimeLogger.info(`Couldn't find that message from database. Returning null`);
+      return null;
+    }
+    client.runtimeLogger.info(`Message found! Returning new instance of Messages class`);
 
     return new Messages(client, JSON.parse(message[0].message));
   }
 
   // Message utilities
   async replyText(text: string, quotedMessage?: boolean): Promise<proto.WebMessageInfo | undefined> {
+    this.runtimeLogger.verbose("src > utils > classes > message > Messages > replyText called!");
+    this.runtimeLogger.verbose(`text: ${text}`);
+    this.runtimeLogger.verbose(`quotedMessage: ${quotedMessage}`);
+
     if (!this.client.socket) {
+      this.runtimeLogger.error("Socket isn't initialized! Throwing error");
       throw new Error("Socket isn't initialized yet!");
     }
 
+    this.runtimeLogger.verbose(`Calling socket.sendMessage`);
     return await this.client.socket.sendMessage(this.chat, { text }, { quoted: quotedMessage ? this.raw : undefined });
   }
 
   async delete(): Promise<void> {
+    this.runtimeLogger.verbose("src > utils > classes > message > Messages > delete called!");
+
     if (!this.client.socket) {
+      this.runtimeLogger.error("Socket isn't initialized! Throwing error");
       throw new Error("Socket isn't initialized yet!");
     }
 
+    this.runtimeLogger.verbose("Calling socket.sendMessage with delete option");
     await this.client.socket.sendMessage(this.chat, { delete: this.msgKey });
   }
 
   async editText(newMessage: string): Promise<proto.WebMessageInfo | undefined> {
+    this.runtimeLogger.verbose("src > utils > classes > message > Messages > editText called!");
+    this.runtimeLogger.verbose(`newMessage: ${newMessage}`);
+
     if (!this.client.socket) {
+      this.runtimeLogger.error("Socket isn't initialized! Throwing error");
       throw new Error("Socket isn't initialized yet!");
     }
 
+    this.runtimeLogger.verbose("Calling socket.sendMessage with edit option");
     return await this.client.socket.sendMessage(this.chat, { text: newMessage, edit: this.msgKey }, { quoted: this.raw });
   }
 
   async handle(handler: MessageHandlerType) {
+    this.runtimeLogger.verbose("src > utils > classes > message > Messages > handle called!");
+
     if (!this.client.socket) {
+      this.runtimeLogger.error("Socket isn't initialized! Throwing error");
       throw new Error("Socket isn't initialized yet!");
     }
+
+    this.runtimeLogger.verbose("Calling specified handler");
     return await handler(this.client.socket, this).catch((err) => {
+      this.runtimeLogger.error("RUNTIME ERROR! Located at src > utils > classes > message > Messages > handle");
+      this.runtimeLogger.error((err as Error).stack ?? (err as Error).message);
       writeErrorToFile(err);
     });
   }
