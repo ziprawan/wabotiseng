@@ -370,8 +370,8 @@ ALTER SEQUENCE public.pre_key_id_seq OWNED BY public.pre_key.id;
 CREATE TABLE public.request_delete_message (
     id bigint NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    confirm_id character varying(25) NOT NULL,
-    message_id character varying(25) NOT NULL,
+    confirm_id character varying(100) NOT NULL,
+    message_id character varying(100) NOT NULL,
     entity_id bigint NOT NULL,
     requested_by character varying(100) NOT NULL,
     agrees character varying(100)[] DEFAULT '{}'::character varying[] NOT NULL,
@@ -406,8 +406,8 @@ ALTER SEQUENCE public.request_delete_message_id_seq OWNED BY public.request_dele
 CREATE TABLE public.request_view_once (
     id bigint NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    confirm_id character varying(25) NOT NULL,
-    message_id character varying(25) NOT NULL,
+    confirm_id character varying(100) NOT NULL,
+    message_id character varying(100) NOT NULL,
     entity_id bigint NOT NULL,
     requested_by character varying(100) NOT NULL,
     accepted boolean DEFAULT false NOT NULL

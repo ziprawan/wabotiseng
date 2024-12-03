@@ -143,7 +143,7 @@ export class Messages {
           if (me && id) return me === id;
         })(),
         id: ctx.stanzaId,
-        participant: this.message.key.participant,
+        participant: ctx.participant,
       },
       message: quot,
     });
