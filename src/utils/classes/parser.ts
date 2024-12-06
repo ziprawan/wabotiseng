@@ -90,6 +90,8 @@ export class Parser {
       if (inTag) {
         if (char === " " || char === "\n") {
           if (currentTag) tags.push(currentTag);
+          inTag = false;
+          currentTag = "";
         } else {
           currentTag += char;
         }
@@ -98,6 +100,8 @@ export class Parser {
       }
     }
 
-    return tags;
+    if (currentTag) tags.push(currentTag);
+
+    return [...new Set(tags)];
   }
 }
