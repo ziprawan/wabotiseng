@@ -126,7 +126,8 @@ CREATE TABLE public.contact (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     saved_name character varying(100) NOT NULL,
-    server_name character varying(100) NOT NULL
+    server_name character varying(100) NOT NULL,
+    signin_code character varying DEFAULT '000000'::character varying NOT NULL
 );
 
 
@@ -370,8 +371,8 @@ ALTER SEQUENCE public.pre_key_id_seq OWNED BY public.pre_key.id;
 CREATE TABLE public.request_delete_message (
     id bigint NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    confirm_id character varying(100) NOT NULL,
-    message_id character varying(100) NOT NULL,
+    confirm_id character varying(50) NOT NULL,
+    message_id character varying(50) NOT NULL,
     entity_id bigint NOT NULL,
     requested_by character varying(100) NOT NULL,
     agrees character varying(100)[] DEFAULT '{}'::character varying[] NOT NULL,
@@ -406,8 +407,8 @@ ALTER SEQUENCE public.request_delete_message_id_seq OWNED BY public.request_dele
 CREATE TABLE public.request_view_once (
     id bigint NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    confirm_id character varying(100) NOT NULL,
-    message_id character varying(100) NOT NULL,
+    confirm_id character varying(50) NOT NULL,
+    message_id character varying(50) NOT NULL,
     entity_id bigint NOT NULL,
     requested_by character varying(100) NOT NULL,
     accepted boolean DEFAULT false NOT NULL
@@ -541,6 +542,67 @@ ALTER SEQUENCE public.session_id_seq OWNED BY public.session.id;
 
 
 --
+-- Name: title; Type: TABLE; Schema: public;
+--
+
+CREATE TABLE public.title (
+    id bigint NOT NULL,
+    group_id bigint NOT NULL,
+    title_name character varying(100) NOT NULL,
+    claimable boolean DEFAULT true NOT NULL
+);
+
+
+--
+-- Name: title_holder; Type: TABLE; Schema: public;
+--
+
+CREATE TABLE public.title_holder (
+    id bigint NOT NULL,
+    title_id bigint NOT NULL,
+    participant_id bigint NOT NULL
+);
+
+
+--
+-- Name: title_holder_id_seq; Type: SEQUENCE; Schema: public;
+--
+
+CREATE SEQUENCE public.title_holder_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: title_holder_id_seq; Type: SEQUENCE OWNED BY; Schema: public;
+--
+
+ALTER SEQUENCE public.title_holder_id_seq OWNED BY public.title_holder.id;
+
+
+--
+-- Name: title_id_seq; Type: SEQUENCE; Schema: public;
+--
+
+CREATE SEQUENCE public.title_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: title_id_seq; Type: SEQUENCE OWNED BY; Schema: public;
+--
+
+ALTER SEQUENCE public.title_id_seq OWNED BY public.title.id;
+
+
+--
 -- Name: app_state_sync_key id; Type: DEFAULT; Schema: public;
 --
 
@@ -625,6 +687,20 @@ ALTER TABLE ONLY public.session ALTER COLUMN id SET DEFAULT nextval('public.sess
 
 
 --
+-- Name: title id; Type: DEFAULT; Schema: public;
+--
+
+ALTER TABLE ONLY public.title ALTER COLUMN id SET DEFAULT nextval('public.title_id_seq'::regclass);
+
+
+--
+-- Name: title_holder id; Type: DEFAULT; Schema: public;
+--
+
+ALTER TABLE ONLY public.title_holder ALTER COLUMN id SET DEFAULT nextval('public.title_holder_id_seq'::regclass);
+
+
+--
 -- Name: app_state_sync_key app_state_sync_key_creds_and_name; Type: CONSTRAINT; Schema: public;
 --
 
@@ -705,6 +781,14 @@ ALTER TABLE ONLY public."group"
 
 
 --
+-- Name: title group_title_name; Type: CONSTRAINT; Schema: public;
+--
+
+ALTER TABLE ONLY public.title
+    ADD CONSTRAINT group_title_name UNIQUE (group_id, title_name);
+
+
+--
 -- Name: message message_entity_id; Type: CONSTRAINT; Schema: public;
 --
 
@@ -734,6 +818,14 @@ ALTER TABLE ONLY public.participant
 
 ALTER TABLE ONLY public.participant
     ADD CONSTRAINT participant_pk PRIMARY KEY (id);
+
+
+--
+-- Name: title participant_title_pk; Type: CONSTRAINT; Schema: public;
+--
+
+ALTER TABLE ONLY public.title
+    ADD CONSTRAINT participant_title_pk PRIMARY KEY (id);
 
 
 --
@@ -849,6 +941,22 @@ ALTER TABLE ONLY public.session
 
 
 --
+-- Name: title_holder title_holder_pk; Type: CONSTRAINT; Schema: public;
+--
+
+ALTER TABLE ONLY public.title_holder
+    ADD CONSTRAINT title_holder_pk PRIMARY KEY (id);
+
+
+--
+-- Name: title_holder title_participant_id; Type: CONSTRAINT; Schema: public;
+--
+
+ALTER TABLE ONLY public.title_holder
+    ADD CONSTRAINT title_participant_id UNIQUE (title_id, participant_id);
+
+
+--
 -- Name: message_created_at_idx; Type: INDEX; Schema: public;
 --
 
@@ -928,6 +1036,14 @@ ALTER TABLE ONLY public."group"
 
 
 --
+-- Name: title group_title_fk; Type: FK CONSTRAINT; Schema: public;
+--
+
+ALTER TABLE ONLY public.title
+    ADD CONSTRAINT group_title_fk FOREIGN KEY (group_id) REFERENCES public."group"(id) NOT VALID;
+
+
+--
 -- Name: message message_entity_fk; Type: FK CONSTRAINT; Schema: public;
 --
 
@@ -944,6 +1060,14 @@ ALTER TABLE ONLY public.participant
 
 
 --
+-- Name: title_holder participant_title_fk; Type: FK CONSTRAINT; Schema: public;
+--
+
+ALTER TABLE ONLY public.title_holder
+    ADD CONSTRAINT participant_title_fk FOREIGN KEY (participant_id) REFERENCES public.participant(id);
+
+
+--
 -- Name: request_delete_message request_delete_message_entity_fk; Type: FK CONSTRAINT; Schema: public;
 --
 
@@ -957,6 +1081,14 @@ ALTER TABLE ONLY public.request_delete_message
 
 ALTER TABLE ONLY public.request_view_once
     ADD CONSTRAINT request_view_once_entity_fk FOREIGN KEY (entity_id) REFERENCES public.entity(id) ON UPDATE CASCADE ON DELETE RESTRICT;
+
+
+--
+-- Name: title_holder title_holder_fk; Type: FK CONSTRAINT; Schema: public;
+--
+
+ALTER TABLE ONLY public.title_holder
+    ADD CONSTRAINT title_holder_fk FOREIGN KEY (title_id) REFERENCES public.title(id);
 
 
 --

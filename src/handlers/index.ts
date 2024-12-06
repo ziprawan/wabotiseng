@@ -3,10 +3,10 @@ import { iya_njir } from "@/stickers";
 import { WASocket } from "@/types/socket";
 import { Messages } from "@/utils/classes/message";
 import { Parser } from "@/utils/classes/parser";
-import { FileLogger } from "@/utils/logger/file";
 import { BufferJSON } from "@whiskeysockets/baileys";
 import { broadcastHandler } from "./anons/broadcast";
 import { confessHandler } from "./anons/confess";
+import { loginCodeHandler } from "./auth/login_code";
 import { deleteReactionhandler } from "./delete/react";
 import { deleteHandler } from "./delete/request";
 import { edunexHandler } from "./edunex";
@@ -71,6 +71,11 @@ export async function mainHandler(sock: WASocket, msg: Messages) {
   if (parser.command === "snipe") {
     await snipeHandler(ctx);
   }
+
+  if (parser.command === "code") {
+    await loginCodeHandler(ctx);
+  }
+
   if (msg.reaction) {
     await viewOnceAcceptHandler(ctx);
     await deleteReactionhandler(ctx);

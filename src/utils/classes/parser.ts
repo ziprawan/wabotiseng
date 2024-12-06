@@ -28,6 +28,10 @@ export class Parser {
   get args(): ArgType[] {
     if (!this.command) return [];
 
+    return this.forceArgs;
+  }
+
+  get forceArgs(): ArgType[] {
     const argsText = this.text.replace(/^[^\s]+\s*/, ""); // Remove the command part
     const args: ArgType[] = [];
     let currentArg = "";
@@ -72,5 +76,28 @@ export class Parser {
     }
 
     return args;
+  }
+
+  tagged(): string[] {
+    const tags: string[] = [];
+
+    let currentTag = "";
+    let inTag = false;
+
+    for (let i = 0; i < this.text.length; i++) {
+      const char = this.text[i];
+
+      if (inTag) {
+        if (char === " " || char === "\n") {
+          if (currentTag) tags.push(currentTag);
+        } else {
+          currentTag += char;
+        }
+      } else {
+        if (char === "@") inTag = true;
+      }
+    }
+
+    return tags;
   }
 }
