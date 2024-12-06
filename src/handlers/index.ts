@@ -17,6 +17,8 @@ import { viewOnceAcceptHandler } from "./viewonce/accepted";
 import { viewOnceCommandHandler } from "./viewonce/view";
 
 export async function mainHandler(sock: WASocket, msg: Messages) {
+  if (msg.msgKey.fromMe) return; // Don't process message if its from me
+
   const parser = new Parser([".", "/"], msg.text);
   console.log("==============================");
   console.log(parser.command, JSON.stringify(parser.args, null, 2));
