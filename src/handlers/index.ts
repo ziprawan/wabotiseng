@@ -12,6 +12,7 @@ import { deleteHandler } from "./delete/request";
 import { edunexHandler } from "./edunex";
 import { snipeHandler } from "./snipe/snipe";
 import { stickerCommandHandler } from "./sticker/create";
+import { taggedHandler } from "./titles/tagged";
 import { viewOnceAcceptHandler } from "./viewonce/accepted";
 import { viewOnceCommandHandler } from "./viewonce/view";
 
@@ -23,6 +24,8 @@ export async function mainHandler(sock: WASocket, msg: Messages) {
   console.log("==============================");
 
   const ctx = { sock, msg, parser };
+
+  await taggedHandler(ctx);
 
   if (parser.command === "ping") {
     await sock.sendMessage(msg.chat, { text: "Pong!" });
