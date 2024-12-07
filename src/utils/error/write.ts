@@ -5,4 +5,6 @@ export function writeErrorToFile(err: unknown, file_prefix?: string) {
     `errors/${file_prefix}-${Date.now()}.log`,
     (err as Error).stack ?? (err as Error).message ?? "Unknown Error."
   );
+
+  return (err as Error).message;
 }
