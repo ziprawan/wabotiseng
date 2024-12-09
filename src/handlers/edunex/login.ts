@@ -67,11 +67,14 @@ export const edunexLoginHandler: CommandHandlerFunc = async ({ msg, parser, sock
     return await msg.replyText("Invalid token! Please try again.");
   }
 
-  await postgresDb.insertInto("edunex_account").values(({ selectFrom }) => ({
-    token: token.content,
-    creds_name: msg.sessionName,
-    user_id: selectFrom("entity as e").select("e.id").where("e.creds_name", "=", msg.from).where("e.type", "=", "Contact"),
-  }));
+  await postgresDb
+    .insertInto("edunex_account")
+    .values(({ selectFrom }) => ({
+      token: token.content,
+      creds_name: msg.sessionName,
+      user_id: selectFrom("entity as e").select("e.id").where("e.creds_name", "=", msg.from).where("e.type", "=", "Contact"),
+    }))
+    .execute();
 
   return await msg.replyText("Berhasil login ke akun Edunex sebagai " + me.name);
 };

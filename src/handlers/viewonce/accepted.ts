@@ -75,7 +75,11 @@ export const viewOnceAcceptHandler: CommandHandlerFunc = async ({ sock, msg }) =
         },
         { quoted: msg.raw }
       );
-      await postgresDb.updateTable("request_view_once as rvo").where("rvo.id", "=", request.id).set({ accepted: true });
+      await postgresDb
+        .updateTable("request_view_once as rvo")
+        .where("rvo.id", "=", request.id)
+        .set({ accepted: true })
+        .execute();
     } catch (err) {
       console.log("Failed! Trying again...");
       writeErrorToFile(err);
