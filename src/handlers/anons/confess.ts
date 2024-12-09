@@ -10,8 +10,8 @@ export const confessHandler: CommandHandlerFunc = async ({ msg, parser, sock }) 
     return;
   }
 
-  const cmd = parser.command as string;
-  const pfx = parser.usedPrefix as string;
+  const cmd = parser.command() as string;
+  const pfx = parser.usedPrefix() as string;
   const confessMsg = parser.text.replace(pfx + cmd, "").trim();
 
   if (confessMsg === "") {

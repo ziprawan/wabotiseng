@@ -16,12 +16,13 @@ Enable or disable notifications from Edunex in this chat.
 
 export const edunexHandler: CommandHandlerFunc = async (ctx) => {
   const { msg, parser } = ctx;
+  const args = parser.args();
 
-  if (parser.args.length === 0) {
+  if (args.length === 0) {
     return await msg.replyText(EDUNEX_WELCOME_MSG.trim());
   }
 
-  const cmd = parser.args[0].content.toLowerCase();
+  const cmd = args[0].content.toLowerCase();
 
   if (cmd === "login") {
     return await edunexLoginHandler(ctx);

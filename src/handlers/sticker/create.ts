@@ -16,6 +16,8 @@ export const stickerCommandHandler: CommandHandlerFunc = async ({ sock, msg, par
   const imageMsg = msg.image ?? msg.reply_to_message?.image;
   const videoMsg = msg.video ?? msg.reply_to_message?.video;
 
+  const args = parser.args();
+
   if (videoMsg) {
     if (videoMsg.fileSize > 5 * 1024 * 1024) {
       /* 5 MB */
@@ -27,7 +29,7 @@ export const stickerCommandHandler: CommandHandlerFunc = async ({ sock, msg, par
 
     while (retries > 0) {
       try {
-        const emojis = parser.args[0]?.content;
+        const emojis = args[0]?.content;
 
         // https://stackoverflow.com/a/68602748
         const segmenter = new Intl.Segmenter("en", { granularity: "grapheme" });
@@ -116,7 +118,7 @@ export const stickerCommandHandler: CommandHandlerFunc = async ({ sock, msg, par
 
   while (retries > 0) {
     try {
-      const emojis = parser.args[0]?.content;
+      const emojis = args[0]?.content;
 
       // https://stackoverflow.com/a/68602748
       const segmenter = new Intl.Segmenter("en", { granularity: "grapheme" });

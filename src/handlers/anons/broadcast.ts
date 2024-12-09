@@ -8,8 +8,9 @@ export const broadcastHandler: CommandHandlerFunc = async ({ msg, parser, sock }
     return;
   }
 
-  const target = parser.args[0];
-  const startBroadMsg = parser.args[1];
+  const args = parser.args();
+  const target = args[0];
+  const startBroadMsg = args[1];
 
   const foundTarget = await postgresDb
     .selectFrom("group as g")

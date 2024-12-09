@@ -20,8 +20,10 @@ export async function mainHandler(sock: WASocket, msg: Messages) {
   if (msg.msgKey.fromMe) return; // Don't process message if its from me
 
   const parser = new Parser([".", "/"], msg.text);
+  const command = parser.command();
+  const args = parser.args();
   console.log("==============================");
-  console.log(parser.command, JSON.stringify(parser.args, null, 2));
+  console.log(command, JSON.stringify(args, null, 2));
   // console.log("Received msg:", msg);
   console.log("==============================");
 
@@ -29,55 +31,55 @@ export async function mainHandler(sock: WASocket, msg: Messages) {
 
   await taggedHandler(ctx);
 
-  if (parser.command === "ping") {
+  if (command === "ping") {
     await sock.sendMessage(msg.chat, { text: "Pong!" });
   }
 
-  if (parser.command === "stk") {
+  if (command === "stk") {
     await stickerCommandHandler(ctx);
   }
 
-  if (parser.command === "vo") {
+  if (command === "vo") {
     await viewOnceCommandHandler(ctx);
   }
 
-  if (parser.command === "edunex" && msg.from === projectConfig.OWNER) {
+  if (command === "edunex" && msg.from === projectConfig.OWNER) {
     await edunexHandler(ctx);
   }
 
-  if (parser.command === "del") {
+  if (command === "del") {
     await deleteHandler(ctx);
   }
 
-  if (parser.command === "debug") {
+  if (command === "debug") {
     await sock.sendMessage(msg.chat, { text: JSON.stringify(msg.raw, BufferJSON.replacer, 2).trim() });
   }
 
-  if (parser.command === "iya") {
+  if (command === "iya") {
     await sock.sendMessage(msg.chat, { sticker: iya_njir });
   }
 
-  if (parser.command === "confess" && msg.chatType === "private" && projectConfig.CONFESS_TARGET) {
+  if (command === "confess" && msg.chatType === "private" && projectConfig.CONFESS_TARGET) {
     await confessHandler(ctx);
   }
 
-  if (parser.command === "args" && msg.from === projectConfig.OWNER) {
-    return await msg.replyText(JSON.stringify(parser.args, null, 2), true);
+  if (command === "args" && msg.from === projectConfig.OWNER) {
+    return await msg.replyText(JSON.stringify(args, null, 2), true);
   }
 
-  if (parser.command === "broadcast" && msg.from === projectConfig.OWNER) {
+  if (command === "broadcast" && msg.from === projectConfig.OWNER) {
     return await broadcastHandler(ctx);
   }
 
-  if (parser.command === "id") {
+  if (command === "id") {
     return await msg.replyText(`Your ID: ${msg.from}\nChat ID: ${msg.chat}`, true);
   }
 
-  if (parser.command === "snipe") {
+  if (command === "snipe") {
     await snipeHandler(ctx);
   }
 
-  if (parser.command === "code") {
+  if (command === "code") {
     await loginCodeHandler(ctx);
   }
 
@@ -86,7 +88,7 @@ export async function mainHandler(sock: WASocket, msg: Messages) {
     await deleteReactionhandler(ctx);
   }
 
-  // if (parser.command === "asdfghjkl" && msg.from === projectConfig.OWNER) {
+  // if (command === "asdfghjkl" && msg.from === projectConfig.OWNER) {
   //   const res = await edunexCourseListCronJob(new FileLogger("edunex-test"), msg.sessionName, sock);
   //   await msg.replyText(res, true);
   // }

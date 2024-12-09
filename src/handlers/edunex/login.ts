@@ -25,7 +25,7 @@ export const edunexLoginHandler: CommandHandlerFunc = async ({ msg, parser, sock
     return await msg.replyText("Use this feature from private chat.");
   }
 
-  const { args } = parser;
+  const args = parser.args();
 
   const savedSettings = await postgresDb
     .selectFrom("edunex_account as ea")

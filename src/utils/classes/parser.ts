@@ -9,13 +9,13 @@ export class Parser {
     this.text = text;
   }
 
-  get usedPrefix(): string | null {
+  usedPrefix(): string | null {
     if (this.prefixes.includes(this.text[0])) {
       return this.text[0];
     } else return null;
   }
 
-  get command(): string | null {
+  command(): string | null {
     for (const prefix of this.prefixes) {
       if (this.text.startsWith(prefix)) {
         const commandMatch = this.text.slice(prefix.length).match(/^\w+/);
@@ -25,13 +25,13 @@ export class Parser {
     return null;
   }
 
-  get args(): ArgType[] {
+  args(): ArgType[] {
     if (!this.command) return [];
 
-    return this.forceArgs;
+    return this.forceArgs();
   }
 
-  get forceArgs(): ArgType[] {
+  forceArgs(): ArgType[] {
     const argsText = this.text.replace(/^[^\s]+\s*/, ""); // Remove the command part
     const args: ArgType[] = [];
     let currentArg = "";
