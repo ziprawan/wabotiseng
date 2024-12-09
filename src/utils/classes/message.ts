@@ -106,18 +106,18 @@ export class Messages {
     return undefined;
   }
 
-  get mentions(): string[] | undefined {
+  get mentions(): string[] {
     const msg = this.message.message;
-    if (!msg) return;
+    if (!msg) return [];
 
     const contentType = getContentType(msg);
     const grabbedMsg = msg[contentType!];
 
     if (!grabbedMsg || typeof grabbedMsg !== "object" || !("contextInfo" in grabbedMsg)) {
-      return;
+      return [];
     }
 
-    return grabbedMsg.contextInfo?.mentionedJid ?? undefined;
+    return grabbedMsg.contextInfo?.mentionedJid ?? [];
   }
 
   get reply_to_message(): Messages | undefined {

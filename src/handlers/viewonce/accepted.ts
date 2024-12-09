@@ -73,6 +73,7 @@ export const viewOnceAcceptHandler: CommandHandlerFunc = async ({ sock, msg }) =
             : mediaType === "video"
             ? { video: mediaBuffer }
             : { audio: mediaBuffer }),
+          mentions: msg.mentions,
         },
         { quoted: msg.raw }
       );
