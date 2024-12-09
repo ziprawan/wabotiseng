@@ -52,16 +52,17 @@ export const viewOnceAcceptHandler: CommandHandlerFunc = async ({ sock, msg }) =
 
   if (request.accepted) return;
 
-  let doAgain = true;
+  let retries: number = 10;
+  let lastError: string = "";
 
-  while (doAgain) {
+  while (retries > 0) {
     try {
       const mediaUrl = mediaMessage.url;
       const mediaKey = getMediaKeys(mediaMessage.mediaKey, mediaType);
       const mediaBinary = await downloadEncryptedContent(mediaUrl, mediaKey);
       const mediaBuffer = await streamToBuffer(mediaBinary);
 
-      doAgain = false;
+      retries = 0;
 
       await sock.sendMessage(
         msg.chat,
@@ -81,9 +82,13 @@ export const viewOnceAcceptHandler: CommandHandlerFunc = async ({ sock, msg }) =
         .set({ accepted: true })
         .execute();
     } catch (err) {
-      console.log("Failed! Trying again...");
-      writeErrorToFile(err);
+      retries--;
+      if (retries <= 0) {
+        lastError = writeErrorToFile(err);
+      }
       continue;
     }
   }
+
+  await msg.replyText("Gagal mengunduh media! Keterangan:\n\n" + lastError, true);
 };
