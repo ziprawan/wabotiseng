@@ -92,4 +92,5 @@ export const viewOnceAcceptHandler: CommandHandlerFunc = async ({ sock, msg }) =
   }
 
   await msg.replyText("Gagal mengunduh media! Keterangan:\n\n" + lastError, true);
+  await postgresDb.deleteFrom("request_view_once as rvo").where("rvo.id", "=", request.id).execute();
 };
