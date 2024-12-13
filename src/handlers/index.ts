@@ -22,11 +22,6 @@ export async function mainHandler(sock: WASocket, msg: Messages) {
   const parser = new Parser([".", "/"], msg.text);
   const command = parser.command();
   const args = parser.args();
-  console.log("==============================");
-  console.log(command, JSON.stringify(args, null, 2));
-  // console.log("Received msg:", msg);
-  console.log("==============================");
-
   const ctx = { sock, msg, parser };
 
   await taggedHandler(ctx);
@@ -81,6 +76,10 @@ export async function mainHandler(sock: WASocket, msg: Messages) {
 
   if (command === "code") {
     await loginCodeHandler(ctx);
+  }
+
+  if (command === "help") {
+    await msg.replyText(`Get some help :3\n\nhttps://ajos.my.id:8443/opc_docs/`, true);
   }
 
   if (msg.reaction) {

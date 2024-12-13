@@ -62,7 +62,6 @@ export const viewOnceCommandHandler: CommandHandlerFunc = async ({ sock, msg }) 
           { quoted: msg.raw }
         );
       } catch (err) {
-        console.log("Failed! Trying again...");
         writeErrorToFile(err);
         continue;
       }

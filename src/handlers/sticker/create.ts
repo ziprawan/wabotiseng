@@ -36,7 +36,6 @@ export const stickerCommandHandler: CommandHandlerFunc = async ({ sock, msg, par
         const segments = segmenter.segment(emojis);
         const emojisArray = [...new Set(Array.from(segments, (s) => s.segment).filter((s) => Emoji.which(s)))];
 
-        console.log(emojisArray);
         const stickerMetadata: IStickerMetadata = {
           "sticker-pack-id": `opc_sticker_packs`,
           "sticker-pack-name": `OPC Bot`,
@@ -125,7 +124,6 @@ export const stickerCommandHandler: CommandHandlerFunc = async ({ sock, msg, par
       const segments = segmenter.segment(emojis);
       const emojisArray = [...new Set(Array.from(segments, (s) => s.segment).filter((s) => Emoji.which(s)))];
 
-      console.log(emojisArray);
       const stickerMetadata: IStickerMetadata = {
         "sticker-pack-id": `opc_sticker_packs`,
         "sticker-pack-name": `OPC Bot`,

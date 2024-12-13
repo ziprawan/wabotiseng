@@ -24,8 +24,6 @@ export const broadcastHandler: CommandHandlerFunc = async ({ msg, parser, sock }
     return await msg.replyText(`Group ${target} is not found!`, true);
   }
 
-  console.log("WOI SINI LU", msg.reply_to_message);
-
   if (msg.reply_to_message) {
     const repliedMessage = await msg.resolveReplyToMessage();
 

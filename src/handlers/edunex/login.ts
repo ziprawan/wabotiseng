@@ -61,8 +61,6 @@ export const edunexLoginHandler: CommandHandlerFunc = async ({ msg, parser, sock
   const edunex = new EdunexAPI(token.content);
   const me = await edunex.getMe();
 
-  console.log(me);
-
   if (typeof me === "string") {
     return await msg.replyText("Invalid token! Please try again.");
   }
