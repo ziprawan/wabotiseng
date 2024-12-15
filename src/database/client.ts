@@ -1,8 +1,8 @@
 import { projectConfig } from "@/config";
 import { FileLogger } from "@/utils/logger/file";
 import { Kysely, PostgresDialect } from "kysely";
-import { DB } from "kysely-codegen";
 import { Pool } from "pg";
+import { DB } from "./db";
 
 const dbLogger = new FileLogger("database", { loglevel: process.env.IS_DEBUG === "true" ? 0 : 1 });
 
