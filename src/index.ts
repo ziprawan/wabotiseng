@@ -39,8 +39,6 @@ migrator
       console.error(error);
       throw new Error(`Process exited caused by failed migration`);
     }
-
-    postgresDb.destroy();
   })
   .finally(() => runtimeLogger.verbose("migrator.migrateToLatest() successfully called!"));
 
