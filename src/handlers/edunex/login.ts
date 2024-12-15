@@ -20,7 +20,7 @@ Here are the steps:
 Good luck!
 `;
 
-export const edunexLoginHandler: CommandHandlerFunc = async ({ msg, parser, sock }) => {
+export const edunexLoginHandler: CommandHandlerFunc = async ({ msg, parser }) => {
   if (!msg.from || msg.chatType !== "private") {
     return await msg.replyText("Use this feature from private chat.");
   }
@@ -28,16 +28,15 @@ export const edunexLoginHandler: CommandHandlerFunc = async ({ msg, parser, sock
   const args = parser.args();
 
   const savedSettings = await postgresDb
-    .selectFrom("edunex_account as ea")
-    .select(["ea.token", "ea.id"])
-    .innerJoin("contact as c", "c.id", "ea.user_id")
-    .innerJoin("entity as e", "e.id", "c.id")
-    .where("ea.creds_name", "=", msg.sessionName)
-    .where("e.remote_jid", "=", msg.from)
+    .selectFrom("contact as c")
+    .leftJoin("edunex_account as ea", "ea.contact_id", "c.id")
+    .select(["c.id", "ea.token"])
     .executeTakeFirst();
 
+  if (!savedSettings) return await msg.replyText("Something went wrong! [EDX0002]");
+
   if (args.length === 1) {
-    if (savedSettings) {
+    if (savedSettings.token) {
       const edunex = new EdunexAPI(savedSettings.token);
       const me = await edunex.getMe();
 
@@ -70,7 +69,7 @@ export const edunexLoginHandler: CommandHandlerFunc = async ({ msg, parser, sock
     .values(({ selectFrom }) => ({
       token: token.content,
       creds_name: msg.sessionName,
-      user_id: selectFrom("entity as e").select("e.id").where("e.creds_name", "=", msg.from).where("e.type", "=", "Contact"),
+      contact_id: savedSettings.id as string,
     }))
     .execute();
 

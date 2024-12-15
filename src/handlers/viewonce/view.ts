@@ -71,10 +71,10 @@ export const viewOnceCommandHandler: CommandHandlerFunc = async ({ sock, msg }) 
   const request = await postgresDb
     .selectFrom("request_view_once as rvo")
     .select(["accepted", "requested_by"])
-    .innerJoin("entity as e", "e.id", "rvo.entity_id")
+    .innerJoin("group as g", "g.id", "rvo.entity_id")
     .where("rvo.message_id", "=", resolvedReply.id ?? "")
-    .where("e.remote_jid", "=", resolvedReply.remoteJid ?? "")
-    .where("e.creds_name", "=", msg.sessionName)
+    .where("g.remote_jid", "=", resolvedReply.remoteJid ?? "")
+    .where("g.creds_name", "=", msg.sessionName)
     .executeTakeFirst();
 
   if (request) {
@@ -111,10 +111,10 @@ export const viewOnceCommandHandler: CommandHandlerFunc = async ({ sock, msg }) 
     .values(({ selectFrom }) => ({
       message_id: resolvedReply.id ?? "",
       confirm_id: sent?.key.id ?? "",
-      entity_id: selectFrom("entity as e")
-        .select("e.id")
-        .where("e.creds_name", "=", msg.sessionName)
-        .where("e.remote_jid", "=", resolvedReply.remoteJid ?? ""),
+      entity_id: selectFrom("group as g")
+        .select("g.id")
+        .where("g.creds_name", "=", msg.sessionName)
+        .where("g.remote_jid", "=", resolvedReply.remoteJid ?? ""),
       requested_by: msg.from,
     }))
     .onConflict((oc) => oc.columns(["confirm_id", "entity_id"]).doNothing())

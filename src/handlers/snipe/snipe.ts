@@ -79,7 +79,10 @@ export const snipeHandler = async ({ msg, sock }: { msg: Messages; sock: WASocke
     }
 
     if (content === null) {
-      return await msg.replyText("[SNP004] Unable to determine media type!", true);
+      return await msg.replyText(
+        `[SNP004] Unable to determine media type! More info:\nmessageId: ${msg.id}\nmediaType: ${mediaType}`,
+        true
+      );
     }
 
     return await sock.sendMessage(msg.chat, content, { quoted: msg.raw });

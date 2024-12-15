@@ -29,10 +29,10 @@ export const deleteReactionhandler: CommandHandlerFunc = async ({ sock, msg }) =
   const request = await postgresDb
     .selectFrom("request_delete_message as rdm")
     .select(["rdm.done", "rdm.agrees", "rdm.disagrees", "rdm.message_id", "rdm.id"])
-    .innerJoin("entity as e", "e.id", "rdm.entity_id")
+    .innerJoin("group as g", "g.id", "rdm.entity_id")
     .where("rdm.confirm_id", "=", resolvedReactMsg.id ?? "")
-    .where("e.remote_jid", "=", msg.chat)
-    .where("e.creds_name", "=", msg.sessionName)
+    .where("g.remote_jid", "=", msg.chat)
+    .where("g.creds_name", "=", msg.sessionName)
     .executeTakeFirst();
 
   if (!request) {

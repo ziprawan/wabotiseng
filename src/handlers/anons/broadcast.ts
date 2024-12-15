@@ -14,7 +14,7 @@ export const broadcastHandler: CommandHandlerFunc = async ({ msg, parser, sock }
 
   const foundTarget = await postgresDb
     .selectFrom("group as g")
-    .innerJoin("entity as e", "e.id", "g.id")
+    .innerJoin("entity as e", "e.id", "g.entity_id")
     .select(["e.remote_jid"])
     .where("e.creds_name", "=", msg.sessionName)
     .where("e.remote_jid", "=", target?.content ?? "")

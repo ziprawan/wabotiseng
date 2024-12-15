@@ -33,10 +33,10 @@ export const deleteHandler: CommandHandlerFunc = async (ctx) => {
   const request = await postgresDb
     .selectFrom("request_delete_message as rdm")
     .select(["rdm.requested_by", "rdm.done"])
-    .innerJoin("entity as e", "e.id", "rdm.entity_id")
+    .innerJoin("group as g", "g.id", "rdm.entity_id")
     .where("rdm.message_id", "=", resolvedReply.id ?? "")
-    .where("e.remote_jid", "=", resolvedReply.chat)
-    .where("e.creds_name", "=", msg.sessionName)
+    .where("g.remote_jid", "=", resolvedReply.chat)
+    .where("g.creds_name", "=", msg.sessionName)
     .executeTakeFirst();
 
   if (request) {
@@ -71,10 +71,10 @@ export const deleteHandler: CommandHandlerFunc = async (ctx) => {
     .insertInto("request_delete_message")
     .values(({ selectFrom }) => ({
       message_id: resolvedReply.id ?? "",
-      entity_id: selectFrom("entity as e")
-        .select("e.id")
-        .where("e.remote_jid", "=", resolvedReply.remoteJid ?? "")
-        .where("e.creds_name", "=", msg.sessionName),
+      entity_id: selectFrom("group as g")
+        .select("g.id")
+        .where("g.remote_jid", "=", resolvedReply.remoteJid ?? "")
+        .where("g.creds_name", "=", msg.sessionName),
       requested_by: msg.from,
       confirm_id: confirmMsg.id ?? "",
     }))
