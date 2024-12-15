@@ -21,6 +21,7 @@ import { participantRoleToEnum } from "../enum/participant_role";
 import { writeErrorToFile } from "../error/write";
 import { FileLogger } from "../logger/file";
 import { ReactionClass } from "./reaction";
+import { randomizeCode } from "../generics/randomizeNumber";
 
 export class Messages {
   constructor(client: Client, private message: proto.IWebMessageInfo) {
@@ -401,7 +402,7 @@ export class Messages {
       this.runtimeLogger.verbose("Gathering chat data from database");
       const groupData = await postgresDb
         .selectFrom("entity as e")
-        .innerJoin("group as g", "g.id", "e.id")
+        .innerJoin("group as g", "g.entity_id", "e.id")
         .selectAll()
         .where("remote_jid", "=", this.remoteJid)
         .where("creds_name", "=", this.sessionName)
@@ -430,7 +431,7 @@ export class Messages {
         restrict,
         member_add_mode,
         join_approval_mode: needAdminApprovalToJoin,
-        linked_parent,
+        linked_parent: linkedParent,
       } = groupData;
 
       return {
@@ -444,7 +445,7 @@ export class Messages {
         canEditGroupInfo: !restrict,
         canSendMessages: !announce,
         needAdminApprovalToJoin,
-        linkedParent: linked_parent,
+        linkedParent,
         subject: {
           content: subject,
           modifiedBy: subject_owner,
@@ -462,7 +463,7 @@ export class Messages {
       this.runtimeLogger.verbose("Gathering contact data from database");
       const contact = await postgresDb
         .selectFrom("entity as e")
-        .innerJoin("contact as c", "c.id", "e.id")
+        .innerJoin("contact as c", "c.entity_id", "e.id")
         .selectAll()
         .where("remote_jid", "=", this.remoteJid)
         .where("creds_name", "=", this.sessionName)
@@ -521,7 +522,6 @@ export class Messages {
         descOwner: desc_owner,
         creation,
         participants,
-        author, // What is this again???
         announce,
         restrict,
         joinApprovalMode: join_approval_mode,
@@ -535,67 +535,79 @@ export class Messages {
         descId: _,
       } = metadata;
 
-      this.runtimeLogger.info("Inserting new entity into database");
-      const insertedEntity = await postgresDb
-        .insertInto("entity")
-        .values({ creds_name: this.sessionName, remote_jid, type: "Group" })
-        .onConflict((oc) => oc.constraint("entity_remote_jid_and_creds_name").doNothing())
-        .returning(["id"])
-        .executeTakeFirst();
+      await postgresDb.transaction().execute(async (trx) => {
+        this.runtimeLogger.info("Inserting new entity into database");
+        const insertedEntity = await trx
+          .insertInto("entity")
+          .values({ creds_name: this.sessionName, remote_jid, type: "Group" })
+          .onConflict((oc) => oc.columns(["remote_jid", "creds_name"]).doNothing())
+          .returning(["id"])
+          .executeTakeFirstOrThrow();
 
-      if (!insertedEntity) {
-        // Entity already inserted
-        this.runtimeLogger.warning("Insert entity doesn't return id! Maybe entity already inserted before");
-        return metadata;
-      }
+        this.runtimeLogger.info("Inserting new group into database");
+        const insertedGroup = await trx
+          .insertInto("group")
+          .values({
+            entity_id: insertedEntity.id,
+            remote_jid,
+            creds_name: this.sessionName,
+            owner: owner ?? "",
+            subject,
+            subject_time: subject_time ? new Date(subject_time) : null,
+            subject_owner,
+            desc,
+            desc_owner,
+            creation: creation ? new Date(creation) : null,
+            announce,
+            restrict,
+            join_approval_mode,
+            linked_parent,
+            member_add_mode,
+            size,
+            is_community,
+            is_community_announce,
+            ephemeral_duration,
+            invite_code,
+          })
+          .onConflict((oc) =>
+            oc.columns(["entity_id"]).doUpdateSet({
+              owner: owner ?? "",
+              subject,
+              subject_time: subject_time ? new Date(subject_time) : null,
+              subject_owner,
+              desc,
+              desc_owner,
+              creation: creation ? new Date(creation) : null,
+              announce,
+              restrict,
+              join_approval_mode,
+              linked_parent,
+              member_add_mode,
+              size,
+              is_community,
+              is_community_announce,
+              ephemeral_duration,
+              invite_code,
+            })
+          )
+          .returning(["id"])
+          .executeTakeFirstOrThrow();
 
-      this.runtimeLogger.info("Inserting new group into database");
-      const insertedGroup = await postgresDb
-        .insertInto("group")
-        .values({
-          id: insertedEntity.id,
-          owner: owner ?? "",
-          subject,
-          subject_time: subject_time ? new Date(subject_time) : null,
-          subject_owner,
-          desc,
-          desc_owner,
-          creation: creation ? new Date(creation) : null,
-          announce,
-          restrict,
-          join_approval_mode,
-          linked_parent,
-          member_add_mode,
-          size,
-          is_community,
-          is_community_announce,
-          ephemeral_duration,
-          invite_code,
-        })
-        .onConflict((oc) => oc.constraint("group_pk").doNothing())
-        .returning(["id"])
-        .executeTakeFirst();
-
-      if (!insertedGroup) {
-        // Group already inserted
-        this.runtimeLogger.warning("Insert group doesn't return id! Maybe group already inserted before");
-        return metadata;
-      }
-
-      this.runtimeLogger.info(`Inserting all new ${participants.length} participants into database`);
-      await postgresDb
-        .insertInto("participant")
-        .values(
-          participants.map((p) => ({
-            group_id: insertedGroup.id,
-            participant_jid: p.id,
-            role: participantRoleToEnum(p.admin),
-          }))
-        )
-        .onConflict((oc) =>
-          oc.columns(["group_id", "participant_jid"]).doUpdateSet((cb) => ({ role: cb.ref("excluded.role") }))
-        )
-        .execute();
+        this.runtimeLogger.info(`Inserting all new ${participants.length} participants into database`);
+        await trx
+          .insertInto("participant")
+          .values(
+            participants.map((p) => ({
+              group_id: insertedGroup.id,
+              participant_jid: p.id,
+              role: participantRoleToEnum(p.admin),
+            }))
+          )
+          .onConflict((oc) =>
+            oc.columns(["group_id", "participant_jid"]).doUpdateSet((cb) => ({ role: cb.ref("excluded.role") }))
+          )
+          .execute();
+      });
 
       this.runtimeLogger.verbose("All done, returning metadata");
 
@@ -608,33 +620,33 @@ export class Messages {
         this.runtimeLogger.verbose("remoteJid is status@broadcast, saving contact instead");
       }
 
-      this.runtimeLogger.info("Inserting new entity into database");
-      const insertedEntity = await postgresDb
-        .insertInto("entity")
-        .values({
-          creds_name: this.sessionName,
-          remote_jid: this.from,
-          type: "Contact",
-        })
-        .onConflict((oc) => oc.constraint("entity_remote_jid_and_creds_name").doNothing())
-        .returning(["id"])
-        .executeTakeFirst();
+      await postgresDb.transaction().execute(async (trx) => {
+        this.runtimeLogger.info("Inserting new entity into database");
+        const insertedEntity = await trx
+          .insertInto("entity")
+          .values({
+            creds_name: this.sessionName,
+            remote_jid: this.from,
+            type: "Contact",
+          })
+          .onConflict((oc) => oc.constraint("entity_remote_jid_and_creds_name").doNothing())
+          .returning(["id"])
+          .executeTakeFirstOrThrow();
 
-      if (!insertedEntity) {
-        this.runtimeLogger.warning("Insert entity doesn't return id! Maybe entity already inserted before");
-        return this.message.pushName ?? "";
-      }
-
-      this.runtimeLogger.info("Inserting new contact into database");
-      await postgresDb
-        .insertInto("contact")
-        .values({
-          id: insertedEntity.id,
-          server_name: this.message.pushName ?? "Unknown.",
-          saved_name: this.message.pushName ?? "Unknown.",
-        })
-        .onConflict((oc) => oc.columns(["id"]).doUpdateSet({ server_name: this.message.pushName ?? "" }))
-        .execute();
+        this.runtimeLogger.info("Inserting new contact into database");
+        await trx
+          .insertInto("contact")
+          .values({
+            entity_id: insertedEntity.id,
+            remote_jid: this.from,
+            creds_name: this.sessionName,
+            server_name: this.message.pushName ?? "Unknown.",
+            saved_name: this.message.pushName ?? "Unknown.",
+            signin_code: randomizeCode(),
+          })
+          .onConflict((oc) => oc.columns(["id"]).doUpdateSet({ server_name: this.message.pushName ?? "" }))
+          .execute();
+      });
 
       this.runtimeLogger.verbose("All done, returning contact name");
       return this.message.pushName ?? "";
@@ -692,7 +704,7 @@ export class Messages {
    * @param opts save message options. dissmissChat, set true if you don't want to save chat info
    * @returns {boolean}
    */
-  async saveMessage(opts: { dismissChat: boolean } = { dismissChat: false }): Promise<boolean> {
+  async saveMessage(opts: { dismissChat: boolean } = { dismissChat: true }): Promise<boolean> {
     this.runtimeLogger.verbose("src > utils > classes > message > Messages > saveMessage called!");
     this.runtimeLogger.verbose(`opts: ${JSON.stringify(opts)}`);
 
@@ -748,9 +760,7 @@ export class Messages {
         }
 
         this.runtimeLogger.verbose("Inserting message to database");
-        this.runtimeLogger.verbose(
-          `Cache: delete-${this.remoteJid}-${this.id}=${this.client.caches[`delete-${this.remoteJid}-${this.id}`]}`
-        );
+        this.runtimeLogger.verbose(`Caches: ${this.client.caches}`);
         await postgresDb
           .insertInto("message")
           .values(({ selectFrom }) => ({
@@ -763,7 +773,7 @@ export class Messages {
             deleted: this.client.caches[`delete-${this.remoteJid}-${this.id}`] === true,
           }))
           .onConflict((oc) =>
-            oc.constraint("message_entity_id").doUpdateSet({
+            oc.columns(["message_id", "entity_id"]).doUpdateSet({
               message: JSON.stringify(this.message),
               deleted: this.client.caches[`delete-${this.remoteJid}-${this.id}`] === true,
             })
