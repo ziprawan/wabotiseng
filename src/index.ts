@@ -16,9 +16,33 @@ import { writeErrorToFile } from "./utils/error/write";
 import { randomizeCode } from "./utils/generics/randomizeNumber";
 import { FileLogger } from "./utils/logger/file";
 
-migrator.migrateToLatest();
-
 const runtimeLogger = new FileLogger("runtime", { loglevel: process.env.IS_DEBUG === "true" ? 0 : 1 });
+
+migrator
+  .migrateToLatest()
+  .then(({ error, results }) => {
+    results?.forEach((it) => {
+      if (it.status === "Success") {
+        runtimeLogger.info(`Migration ${it.migrationName} was executed successfully!`);
+      } else if (it.status === "Error") {
+        runtimeLogger.error(`Failed to execute migration ${it.migrationName}!`);
+      } else {
+        runtimeLogger.verbose(`Migration ${it.migrationName} is not executed!`);
+      }
+    });
+
+    if (error) {
+      runtimeLogger.error(`Failed to execute all migration(s)!`);
+      runtimeLogger.error(error as any);
+      runtimeLogger.error("Exiting...");
+      console.error("Something went wrong when doing database migration!");
+      console.error(error);
+      throw new Error(`Process exited caused by failed migration`);
+    }
+
+    postgresDb.destroy();
+  })
+  .finally(() => runtimeLogger.verbose("migrator.migrateToLatest() successfully called!"));
 
 const client = new Client(projectConfig.SESSION_NAME ?? "wa", 10, runtimeLogger);
 
