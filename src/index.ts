@@ -1,7 +1,7 @@
 // Fix alias import when compiled by tsc
 import "module-alias/register";
 
-import { BufferJSON } from "@whiskeysockets/baileys";
+import { BufferJSON, Contact, GroupMetadata } from "@whiskeysockets/baileys";
 import { sql } from "kysely";
 import { Client } from "./client";
 import { projectConfig } from "./config";
@@ -15,6 +15,7 @@ import { participantRoleToEnum } from "./utils/enum/participant_role";
 import { writeErrorToFile } from "./utils/error/write";
 import { randomizeCode } from "./utils/generics/randomizeNumber";
 import { FileLogger } from "./utils/logger/file";
+import { sleep } from "./utils/sleep";
 
 const runtimeLogger = new FileLogger("runtime", { loglevel: process.env.IS_DEBUG === "true" ? 0 : 1 });
 
@@ -57,12 +58,12 @@ const unhanldedEvents: BaileysEventList[] = [
   "chats.phoneNumberShare",
   "chats.update",
   "chats.upsert",
-  // "contacts.update",
+  "contacts.update",
   "contacts.upsert", // Maybe this will only triggers when I save a new contact on WhatsApp
-  // "group-participants.update",
+  "group-participants.update",
   "group.join-request",
   "groups.update",
-  // "groups.upsert",
+  "groups.upsert",
   "labels.association",
   "labels.edit",
   "message-receipt.update",
@@ -376,6 +377,151 @@ client.addEventHandler("groups.upsert", async (_sock, event) => {
     });
     runtimeLogger.verbose("Transaction completed!");
     runtimeLogger.verbose("All done, returning metadata");
+  }
+});
+
+runtimeLogger.info("Adding messaging-history.set event handler");
+client.addEventHandler("messaging-history.set", async (sock, event) => {
+  runtimeLogger.verbose("messaging-history.set handler called");
+  const contacts = event.contacts;
+
+  // { jid: notify }
+  const insertContacts: Record<string, string> = {};
+  const insertContactJids: Set<string> = new Set();
+
+  // jids[]
+  const insertGroups: Record<string, GroupMetadata> = {};
+  const insertGroupJids: Set<string> = new Set();
+
+  // Unhandled entities
+  const unhandledEntities: Contact[] = [];
+
+  for (let i = 0; i < contacts.length; i++) {
+    const entity = contacts[i];
+
+    if (entity.id.endsWith("@g.us")) {
+      // This is a group
+      insertGroupJids.add(entity.id);
+    } else if (entity.id.endsWith("@s.whatsapp.net")) {
+      // This is a contact
+      if (!entity.notify) continue;
+      insertContactJids.add(entity.id);
+      insertContacts[entity.id] = entity.notify;
+    } else {
+      unhandledEntities.push(entity);
+    }
+  }
+
+  if (insertContactJids.size > 0) {
+    runtimeLogger.verbose(`insertContacJids size is greater than 0 (${insertContactJids.size})`);
+
+    const existingContacts = await postgresDb
+      .selectFrom("contact as c")
+      .select(["remote_jid"])
+      .where("c.creds_name", "=", projectConfig.SESSION_NAME)
+      .where("c.remote_jid", "in", [...insertContactJids])
+      .execute();
+
+    existingContacts.forEach((c) => insertContactJids.delete(c.remote_jid));
+
+    await postgresDb.transaction().execute(async (trx) => {
+      const insertedEntities = await trx
+        .insertInto("entity")
+        .values(
+          [...insertContactJids].map((remote_jid) => ({
+            creds_name: projectConfig.SESSION_NAME,
+            remote_jid,
+            type: "Contact",
+          }))
+        )
+        .returning(["id", "remote_jid"])
+        .onConflict((oc) => oc.columns(["remote_jid", "creds_name"]).doNothing())
+        .execute();
+
+      if (insertedEntities.length === 0) {
+        throw new Error("Nothing to do huh?");
+      }
+
+      await trx
+        .insertInto("contact")
+        .values(
+          insertedEntities.map(({ remote_jid, id: entity_id }) => ({
+            creds_name: projectConfig.SESSION_NAME,
+            remote_jid,
+            entity_id,
+            saved_name: insertContacts[remote_jid],
+            server_name: insertContacts[remote_jid],
+            signin_code: randomizeCode(),
+          }))
+        )
+        .onConflict((oc) => oc.columns(["entity_id"]).doNothing())
+        .execute();
+    });
+  }
+
+  if (insertGroupJids.size > 0) {
+    const insertGroupJidsArr = [...insertGroupJids];
+    const groupIsExists = await postgresDb
+      .selectFrom("group as g")
+      .select(["remote_jid"])
+      .where("g.creds_name", "=", projectConfig.SESSION_NAME)
+      .where("g.remote_jid", "in", insertGroupJidsArr)
+      .execute();
+
+    // Filter it, just insert group when it doesn't exists on database
+    groupIsExists.forEach(({ remote_jid }) => insertGroupJids.delete(remote_jid));
+
+    for (let i = 0; i < insertGroupJidsArr.length; i++) {
+      const jid = insertGroupJidsArr[i];
+      runtimeLogger.verbose("Sleeping for 2 seconds");
+      await sleep(2000);
+      runtimeLogger.verbose("Querying metadata...");
+      const metadata = await sock.groupMetadata(jid);
+
+      await postgresDb.transaction().execute(async (trx) => {
+        const insertedEntities = await trx
+          .insertInto("entity")
+          .values({ creds_name: projectConfig.SESSION_NAME, remote_jid: jid, type: "Group" })
+          .returning(["id", "remote_jid"])
+          .onConflict((oc) => oc.columns(["remote_jid", "creds_name"]).doNothing())
+          .execute();
+
+        if (insertedEntities.length === 0) {
+          throw new Error("Nothing to do huh?");
+        }
+
+        await trx
+          .insertInto("group")
+          .values(
+            insertedEntities.map(({ id, remote_jid }) => {
+              return {
+                entity_id: id,
+                remote_jid,
+                creds_name: projectConfig.SESSION_NAME,
+                owner: metadata.owner ?? "",
+                subject: metadata.subject,
+                subject_time: metadata.subjectTime ? new Date(metadata.subjectTime) : null,
+                subject_owner: metadata.subjectOwner,
+                desc: metadata.desc,
+                desc_owner: metadata.descOwner,
+                creation: metadata.creation ? new Date(metadata.creation) : null,
+                announce: metadata.announce,
+                restrict: metadata.restrict,
+                join_approval_mode: metadata.joinApprovalMode,
+                linked_parent: metadata.linkedParent,
+                member_add_mode: metadata.memberAddMode,
+                size: metadata.size,
+                is_community: metadata.isCommunity,
+                is_community_announce: metadata.isCommunityAnnounce,
+                ephemeral_duration: metadata.ephemeralDuration,
+                invite_code: metadata.inviteCode,
+              };
+            })
+          )
+          .onConflict((oc) => oc.columns(["entity_id"]).doNothing())
+          .execute();
+      });
+    }
   }
 });
 
