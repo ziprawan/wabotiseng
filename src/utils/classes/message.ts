@@ -760,7 +760,7 @@ export class Messages {
         }
 
         this.runtimeLogger.verbose("Inserting message to database");
-        this.runtimeLogger.verbose(`Caches: ${this.client.caches}`);
+        this.runtimeLogger.verbose(`Caches: ${JSON.stringify(this.client.caches)}`);
         await postgresDb
           .insertInto("message")
           .values(({ selectFrom }) => ({
