@@ -1,6 +1,5 @@
 import { postgresDb } from "@/database/client";
 import { CommandHandlerFunc } from "@/types/command/handler";
-import { writeErrorToFile } from "@/utils/error/write";
 import { streamToBuffer } from "@/utils/stream/toBuffer";
 import { downloadEncryptedContent, getMediaKeys } from "@whiskeysockets/baileys";
 
@@ -65,7 +64,7 @@ export const viewOnceCommandHandler: CommandHandlerFunc = async ({ sock, msg }) 
       } catch (err) {
         retries--;
         if (retries <= 0) {
-          lastError = writeErrorToFile(err);
+          lastError = (err as Error).stack ?? "Unknown.";
         }
         continue;
       }

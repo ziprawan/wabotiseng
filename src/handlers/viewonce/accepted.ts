@@ -1,7 +1,6 @@
 import { postgresDb } from "@/database/client";
 import { CommandHandlerFunc } from "@/types/command/handler";
 import { Messages } from "@/utils/classes/message";
-import { writeErrorToFile } from "@/utils/error/write";
 import { streamToBuffer } from "@/utils/stream/toBuffer";
 import { downloadEncryptedContent, getMediaKeys } from "@whiskeysockets/baileys";
 
@@ -37,7 +36,6 @@ export const viewOnceAcceptHandler: CommandHandlerFunc = async ({ sock, msg }) =
 
   const viewOnceMessage = (await Messages.getMessage(msg.client, msg.chat, request.message_id))?.viewOnceMessage;
   if (!viewOnceMessage) {
-    writeErrorToFile(new Error("Requested message is not a view once message!"));
     return;
   }
 
@@ -85,7 +83,7 @@ export const viewOnceAcceptHandler: CommandHandlerFunc = async ({ sock, msg }) =
     } catch (err) {
       retries--;
       if (retries <= 0) {
-        lastError = writeErrorToFile(err);
+        lastError = (err as Error).stack ?? "Unknown.";
       }
       continue;
     }

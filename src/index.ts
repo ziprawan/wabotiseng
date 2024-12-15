@@ -1,7 +1,7 @@
 // Fix alias import when compiled by tsc
 import "module-alias/register";
 
-import { BufferJSON, Contact, GroupMetadata } from "@whiskeysockets/baileys";
+import { BufferJSON, Contact } from "@whiskeysockets/baileys";
 import { sql } from "kysely";
 import { Client } from "./client";
 import { projectConfig } from "./config";
@@ -12,7 +12,6 @@ import { mainHandler } from "./handlers";
 import { BaileysEventList } from "./types/events";
 import { Messages } from "./utils/classes/message";
 import { participantRoleToEnum } from "./utils/enum/participant_role";
-import { writeErrorToFile } from "./utils/error/write";
 import { randomizeCode } from "./utils/generics/randomizeNumber";
 import { FileLogger } from "./utils/logger/file";
 import { sleep } from "./utils/sleep";
@@ -609,5 +608,6 @@ client.on("close", () => {
 
 runtimeLogger.info("Launching client");
 client.launch().catch((err) => {
-  writeErrorToFile(err);
+  runtimeLogger.error("Client launcher errored! Additional info:");
+  runtimeLogger.error((err as Error).stack ?? "Unknown.");
 });

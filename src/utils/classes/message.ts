@@ -18,10 +18,9 @@ import { ContactMessage } from "@/types/whatsapp/contact";
 import { MessageHandlerType, MessageType } from "@/types/whatsapp/message";
 import { getContentType, GroupMetadata, proto } from "@whiskeysockets/baileys";
 import { participantRoleToEnum } from "../enum/participant_role";
-import { writeErrorToFile } from "../error/write";
+import { randomizeCode } from "../generics/randomizeNumber";
 import { FileLogger } from "../logger/file";
 import { ReactionClass } from "./reaction";
-import { randomizeCode } from "../generics/randomizeNumber";
 
 export class Messages {
   constructor(client: Client, private message: proto.IWebMessageInfo) {
@@ -722,7 +721,6 @@ export class Messages {
           "RUNTIME ERROR! Located at src > utils > classes > message > Messages > saveMessage > save chat"
         );
         this.runtimeLogger.error((err as Error).stack ?? (err as Error).message);
-        writeErrorToFile(err, "src.utils.classes.message.saveMessage.saveChat");
       }
     }
 
@@ -749,7 +747,6 @@ export class Messages {
           "RUNTIME ERROR! Located at src > utils > classes > message > Messages > saveMessage > update deleted state"
         );
         this.runtimeLogger.error((err as Error).stack ?? (err as Error).message);
-        writeErrorToFile(err, "src.utils.classes.message.saveMessage.deleted");
         return false;
       }
     } else {
@@ -788,7 +785,6 @@ export class Messages {
           "RUNTIME ERROR! Located at src > utils > classes > message > Messages > saveMessage > save message"
         );
         this.runtimeLogger.error((err as Error).stack ?? (err as Error).message);
-        writeErrorToFile(err, "src.utils.classes.message.saveMessage.upsertMessage");
       }
     }
 
@@ -871,7 +867,6 @@ export class Messages {
     return await handler(this.client.socket, this).catch((err) => {
       this.runtimeLogger.error("RUNTIME ERROR! Located at src > utils > classes > message > Messages > handle");
       this.runtimeLogger.error((err as Error).stack ?? (err as Error).message);
-      writeErrorToFile(err);
     });
   }
 }

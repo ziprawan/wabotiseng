@@ -1,13 +1,11 @@
 import { DatabaseSession } from "@/types/client";
 import { CronFunc } from "@/types/cron";
 import { BaileysEventList, EventHandlerFunc, WSHandlerFunc } from "@/types/events";
-import { writeErrorToFile } from "@/utils/error/write";
 import { FileLogger } from "@/utils/logger/file";
 import { useDatabaseAuthState } from "@/utils/session/manager";
 import { sleep } from "@/utils/sleep";
 import { Boom } from "@hapi/boom";
 import makeWASocket, {
-  BaileysEvent,
   BaileysEventMap,
   BinaryNode,
   ConnectionState,
@@ -239,7 +237,8 @@ export class Client extends EventEmitter {
         }
 
         value.func(this.socket, arg).catch((err) => {
-          writeErrorToFile(err);
+          this.runtimeLogger.error(`Event ${value.event} Handler errored! Additional info:`);
+          this.runtimeLogger.error((err as Error).stack ?? "Unknown.");
         });
       });
     });
@@ -253,7 +252,8 @@ export class Client extends EventEmitter {
         }
 
         value.func(this.socket, arg).catch((err) => {
-          writeErrorToFile(err);
+          this.runtimeLogger.error(`WS ${value.event} Handler errored! Additional info:`);
+          this.runtimeLogger.error((err as Error).stack ?? "Unknown.");
         });
       });
     });

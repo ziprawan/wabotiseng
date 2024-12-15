@@ -1,7 +1,6 @@
 import { pola_pikir } from "@/stickers";
 import { CommandHandlerFunc } from "@/types/command/handler";
 import { IStickerMetadata } from "@/types/whatsapp/sticker";
-import { writeErrorToFile } from "@/utils/error/write";
 import { isLiterallyDecimal } from "@/utils/generics/isNumeric";
 import { streamToBuffer } from "@/utils/stream/toBuffer";
 import { createSticker } from "@/utils/whatsapp/stickers/createSticker";
@@ -100,7 +99,7 @@ export const stickerCommandHandler: CommandHandlerFunc = async ({ sock, msg, par
         });
       } catch (err) {
         retries--;
-        lastError = writeErrorToFile(err);
+        lastError = (err as Error).stack ?? "Unknown.";
         continue;
       }
     }
@@ -145,8 +144,8 @@ export const stickerCommandHandler: CommandHandlerFunc = async ({ sock, msg, par
       retries = 0;
 
       return await sock.sendMessage(msg.chat, { sticker: stickerWithMetadata }, { quoted: msg.raw }); // Send the sticker
-    } catch (error) {
-      lastError = writeErrorToFile(error);
+    } catch (err) {
+      lastError = (err as Error).stack ?? "Unknown.";
       continue;
     }
   }
