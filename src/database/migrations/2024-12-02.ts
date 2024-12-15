@@ -74,6 +74,7 @@ export const Migration20241202: Migration = {
         builder
           .addColumn("session_name", "varchar(255)", (col) => col.notNull())
           .addColumn("session_string", "text", (col) => col.notNull())
+          .addPrimaryKeyConstraint("cred_pk", ["session_name"])
       )
       .execute();
     await db.schema
