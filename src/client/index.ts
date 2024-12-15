@@ -6,7 +6,14 @@ import { FileLogger } from "@/utils/logger/file";
 import { useDatabaseAuthState } from "@/utils/session/manager";
 import { sleep } from "@/utils/sleep";
 import { Boom } from "@hapi/boom";
-import makeWASocket, { BinaryNode, ConnectionState, DisconnectReason, WASocket } from "@whiskeysockets/baileys";
+import makeWASocket, {
+  BaileysEvent,
+  BaileysEventMap,
+  BinaryNode,
+  ConnectionState,
+  DisconnectReason,
+  WASocket,
+} from "@whiskeysockets/baileys";
 import { CronJob } from "cron";
 import NodeCache from "node-cache";
 import { EventEmitter } from "node:events";
@@ -45,6 +52,8 @@ export class Client extends EventEmitter {
   public session?: DatabaseSession;
   public logger: typeof Logger;
   public caches: Record<string, any>;
+  public isEventSuspended: boolean = false;
+  public suspendedEvents: [BaileysEventList, BaileysEventMap[BaileysEventList]][] = [];
 
   reconnectFail: number;
 
@@ -161,6 +170,29 @@ export class Client extends EventEmitter {
     } else if (connection === "open") {
       this.runtimeLogger.info("Connection opened!");
       logger.info("Connection opened.");
+    }
+  }
+
+  setEventSuspendedState(state: boolean) {
+    this.runtimeLogger.verbose("Event suspension state changed to: " + String(state));
+    if (state) {
+      this.isEventSuspended = true;
+    } else {
+      this.isEventSuspended = false;
+
+      this.runtimeLogger.verbose(`Emitting all ${this.suspendedEvents.length} event`);
+      for (let i = 0; i < this.suspendedEvents.length; i++) {
+        if (this.isEventSuspended) {
+          // Maybe this will happen? Who knows
+          this.runtimeLogger.verbose("ITS HAPPENING!");
+          break;
+        }
+
+        const [eventName, event] = this.suspendedEvents[i];
+        this.suspendedEvents.shift();
+        this.runtimeLogger.verbose(`Emitting event: ${eventName}`);
+        this.emit(eventName, event);
+      }
     }
   }
 

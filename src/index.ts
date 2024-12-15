@@ -76,6 +76,12 @@ const unhanldedEvents: BaileysEventList[] = [
 
 runtimeLogger.info("Adding messages.upsert event handler");
 client.addEventHandler("messages.upsert", async (sock, event) => {
+  if (client.isEventSuspended) {
+    runtimeLogger.verbose(`Currently event suspension state is true! Archiving event "messages.upsert"`);
+    client.suspendedEvents.push(["messages.upsert", event]);
+    return;
+  }
+
   try {
     const { messages } = event;
     runtimeLogger.info(`Got new ${messages.length} event(s)!`);
@@ -107,6 +113,13 @@ client.addEventHandler("messages.upsert", async (sock, event) => {
 runtimeLogger.info("Adding contacts.update event handler");
 client.addEventHandler("contacts.update", async (_sock, event) => {
   runtimeLogger.verbose("contacts.update event handler called!");
+
+  if (client.isEventSuspended) {
+    runtimeLogger.verbose(`Currently event suspension state is true! Archiving event "contacts.update"`);
+    client.suspendedEvents.push(["contacts.update", event]);
+    return;
+  }
+
   runtimeLogger.verbose("Filtering events");
   const filteredEvents: { id: string; notify: string }[] = event.filter(
     (e) => typeof e.id === "string" && typeof e.notify === "string"
@@ -220,6 +233,12 @@ client.addEventHandler("contacts.update", async (_sock, event) => {
 
 runtimeLogger.info("Adding group-participants.update event handler");
 client.addEventHandler("group-participants.update", async (sock, event) => {
+  if (client.isEventSuspended) {
+    runtimeLogger.verbose(`Currently event suspension state is true! Archiving event "group-participants.update"`);
+    client.suspendedEvents.push(["group-participants.update", event]);
+    return;
+  }
+
   if (event.participants.length === 0) {
     return runtimeLogger.warning(`event.participants length is 0! Ignoring`);
   }
@@ -296,6 +315,12 @@ client.addEventHandler("group-participants.update", async (sock, event) => {
 
 runtimeLogger.info("Adding groups.upsert event handler");
 client.addEventHandler("groups.upsert", async (_sock, event) => {
+  if (client.isEventSuspended) {
+    runtimeLogger.verbose(`Currently event suspension state is true! Archiving event "groups.upsert"`);
+    client.suspendedEvents.push(["groups.upsert", event]);
+    return;
+  }
+
   for (let i = 0; i < event.length; i++) {
     const {
       id: remote_jid,
@@ -383,14 +408,22 @@ client.addEventHandler("groups.upsert", async (_sock, event) => {
 runtimeLogger.info("Adding messaging-history.set event handler");
 client.addEventHandler("messaging-history.set", async (sock, event) => {
   runtimeLogger.verbose("messaging-history.set handler called");
+
+  if (client.isEventSuspended) {
+    runtimeLogger.verbose(`Currently event suspension state is true! Archiving event "messaging-history.set"`);
+    client.suspendedEvents.push(["messaging-history.set", event]);
+    return;
+  }
+
+  client.setEventSuspendedState(true);
   const contacts = event.contacts;
+  sock.user && contacts.push(sock.user);
 
   // { jid: notify }
   const insertContacts: Record<string, string> = {};
   const insertContactJids: Set<string> = new Set();
 
   // jids[]
-  const insertGroups: Record<string, GroupMetadata> = {};
   const insertGroupJids: Set<string> = new Set();
 
   // Unhandled entities
@@ -404,9 +437,8 @@ client.addEventHandler("messaging-history.set", async (sock, event) => {
       insertGroupJids.add(entity.id);
     } else if (entity.id.endsWith("@s.whatsapp.net")) {
       // This is a contact
-      if (!entity.notify) continue;
       insertContactJids.add(entity.id);
-      insertContacts[entity.id] = entity.notify;
+      insertContacts[entity.id] = entity.notify ?? "Unknown.";
     } else {
       unhandledEntities.push(entity);
     }
@@ -423,44 +455,54 @@ client.addEventHandler("messaging-history.set", async (sock, event) => {
       .execute();
 
     existingContacts.forEach((c) => insertContactJids.delete(c.remote_jid));
+    runtimeLogger.verbose(`insertContactJids: ${[...insertContactJids]}`);
 
-    await postgresDb.transaction().execute(async (trx) => {
-      const insertedEntities = await trx
-        .insertInto("entity")
-        .values(
-          [...insertContactJids].map((remote_jid) => ({
-            creds_name: projectConfig.SESSION_NAME,
-            remote_jid,
-            type: "Contact",
-          }))
-        )
-        .returning(["id", "remote_jid"])
-        .onConflict((oc) => oc.columns(["remote_jid", "creds_name"]).doNothing())
-        .execute();
+    if (insertContactJids.size > 0) {
+      try {
+        await postgresDb.transaction().execute(async (trx) => {
+          const insertedEntities = await trx
+            .insertInto("entity")
+            .values(
+              [...insertContactJids].map((remote_jid) => ({
+                creds_name: projectConfig.SESSION_NAME,
+                remote_jid,
+                type: "Contact",
+              }))
+            )
+            .returning(["id", "remote_jid"])
+            .onConflict((oc) => oc.columns(["remote_jid", "creds_name"]).doNothing())
+            .execute();
 
-      if (insertedEntities.length === 0) {
-        throw new Error("Nothing to do huh?");
+          if (insertedEntities.length === 0) {
+            throw new Error("Nothing to do huh?");
+          }
+
+          await trx
+            .insertInto("contact")
+            .values(
+              insertedEntities.map(({ remote_jid, id: entity_id }) => ({
+                creds_name: projectConfig.SESSION_NAME,
+                remote_jid,
+                entity_id,
+                saved_name: insertContacts[remote_jid],
+                server_name: insertContacts[remote_jid],
+                signin_code: randomizeCode(),
+              }))
+            )
+            .onConflict((oc) => oc.columns(["entity_id"]).doNothing())
+            .execute();
+        });
+      } catch {
+        client.setEventSuspendedState(false);
+        runtimeLogger.verbose("Insert error, maybe entity already inserted?");
       }
+    }
 
-      await trx
-        .insertInto("contact")
-        .values(
-          insertedEntities.map(({ remote_jid, id: entity_id }) => ({
-            creds_name: projectConfig.SESSION_NAME,
-            remote_jid,
-            entity_id,
-            saved_name: insertContacts[remote_jid],
-            server_name: insertContacts[remote_jid],
-            signin_code: randomizeCode(),
-          }))
-        )
-        .onConflict((oc) => oc.columns(["entity_id"]).doNothing())
-        .execute();
-    });
+    runtimeLogger.verbose(`All contact inserted!`);
   }
 
   if (insertGroupJids.size > 0) {
-    const insertGroupJidsArr = [...insertGroupJids];
+    let insertGroupJidsArr = [...insertGroupJids];
     const groupIsExists = await postgresDb
       .selectFrom("group as g")
       .select(["remote_jid"])
@@ -470,59 +512,77 @@ client.addEventHandler("messaging-history.set", async (sock, event) => {
 
     // Filter it, just insert group when it doesn't exists on database
     groupIsExists.forEach(({ remote_jid }) => insertGroupJids.delete(remote_jid));
+    runtimeLogger.verbose(`insertGroupJids: ${insertGroupJidsArr}`);
+
+    insertGroupJidsArr = [...insertGroupJids];
 
     for (let i = 0; i < insertGroupJidsArr.length; i++) {
       const jid = insertGroupJidsArr[i];
-      runtimeLogger.verbose("Sleeping for 2 seconds");
-      await sleep(2000);
+      runtimeLogger.verbose("Sleeping for 0.5 seconds");
+      await sleep(500);
       runtimeLogger.verbose("Querying metadata...");
       const metadata = await sock.groupMetadata(jid);
+      runtimeLogger.verbose("Query complete! Inserting to database");
 
-      await postgresDb.transaction().execute(async (trx) => {
-        const insertedEntities = await trx
-          .insertInto("entity")
-          .values({ creds_name: projectConfig.SESSION_NAME, remote_jid: jid, type: "Group" })
-          .returning(["id", "remote_jid"])
-          .onConflict((oc) => oc.columns(["remote_jid", "creds_name"]).doNothing())
-          .execute();
+      try {
+        await postgresDb.transaction().execute(async (trx) => {
+          const insertedEntities = await trx
+            .insertInto("entity")
+            .values({ creds_name: projectConfig.SESSION_NAME, remote_jid: jid, type: "Group" })
+            .returning(["id", "remote_jid"])
+            .onConflict((oc) => oc.columns(["remote_jid", "creds_name"]).doNothing())
+            .execute();
 
-        if (insertedEntities.length === 0) {
-          throw new Error("Nothing to do huh?");
-        }
+          if (insertedEntities.length === 0) {
+            throw new Error("Nothing to do huh?");
+          }
 
-        await trx
-          .insertInto("group")
-          .values(
-            insertedEntities.map(({ id, remote_jid }) => {
-              return {
-                entity_id: id,
-                remote_jid,
-                creds_name: projectConfig.SESSION_NAME,
-                owner: metadata.owner ?? "",
-                subject: metadata.subject,
-                subject_time: metadata.subjectTime ? new Date(metadata.subjectTime) : null,
-                subject_owner: metadata.subjectOwner,
-                desc: metadata.desc,
-                desc_owner: metadata.descOwner,
-                creation: metadata.creation ? new Date(metadata.creation) : null,
-                announce: metadata.announce,
-                restrict: metadata.restrict,
-                join_approval_mode: metadata.joinApprovalMode,
-                linked_parent: metadata.linkedParent,
-                member_add_mode: metadata.memberAddMode,
-                size: metadata.size,
-                is_community: metadata.isCommunity,
-                is_community_announce: metadata.isCommunityAnnounce,
-                ephemeral_duration: metadata.ephemeralDuration,
-                invite_code: metadata.inviteCode,
-              };
-            })
-          )
-          .onConflict((oc) => oc.columns(["entity_id"]).doNothing())
-          .execute();
-      });
+          await trx
+            .insertInto("group")
+            .values(
+              insertedEntities.map(({ id, remote_jid }) => {
+                return {
+                  entity_id: id,
+                  remote_jid,
+                  creds_name: projectConfig.SESSION_NAME,
+                  owner: metadata.owner ?? "",
+                  subject: metadata.subject,
+                  subject_time: metadata.subjectTime ? new Date(metadata.subjectTime) : null,
+                  subject_owner: metadata.subjectOwner,
+                  desc: metadata.desc,
+                  desc_owner: metadata.descOwner,
+                  creation: metadata.creation ? new Date(metadata.creation) : null,
+                  announce: metadata.announce,
+                  restrict: metadata.restrict,
+                  join_approval_mode: metadata.joinApprovalMode,
+                  linked_parent: metadata.linkedParent,
+                  member_add_mode: metadata.memberAddMode,
+                  size: metadata.size,
+                  is_community: metadata.isCommunity,
+                  is_community_announce: metadata.isCommunityAnnounce,
+                  ephemeral_duration: metadata.ephemeralDuration,
+                  invite_code: metadata.inviteCode,
+                };
+              })
+            )
+            .onConflict((oc) => oc.columns(["entity_id"]).doNothing())
+            .execute();
+        });
+      } catch {
+        client.setEventSuspendedState(false);
+        runtimeLogger.verbose("Insert error, maybe entity already inserted?");
+      }
+
+      runtimeLogger.verbose(`Group ${jid} inserted!`);
     }
   }
+
+  if (unhandledEntities.length > 0) {
+    runtimeLogger.verbose(`Unhandled entities total: ${unhandledEntities.length}`);
+    runtimeLogger.verbose(`Additional unhandled entities info: ${JSON.stringify(unhandledEntities)}`);
+  }
+
+  client.setEventSuspendedState(false);
 });
 
 if (process.env.IS_DEBUG === "true") {
