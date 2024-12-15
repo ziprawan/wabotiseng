@@ -70,7 +70,7 @@ export const viewOnceCommandHandler: CommandHandlerFunc = async ({ sock, msg }) 
       }
     }
 
-    await msg.replyText("Gagal mengunduh media! Keterangan:\n\n" + lastError, true);
+    return await msg.replyText("Gagal mengunduh media! Keterangan:\n\n" + lastError, true);
   }
 
   const request = await postgresDb
