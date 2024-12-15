@@ -6,6 +6,7 @@ import { sql } from "kysely";
 import { Client } from "./client";
 import { projectConfig } from "./config";
 import { postgresDb } from "./database/client";
+import { migrator } from "./database/migrate";
 import { values } from "./database/utils";
 import { mainHandler } from "./handlers";
 import { BaileysEventList } from "./types/events";
@@ -14,6 +15,8 @@ import { participantRoleToEnum } from "./utils/enum/participant_role";
 import { writeErrorToFile } from "./utils/error/write";
 import { randomizeCode } from "./utils/generics/randomizeNumber";
 import { FileLogger } from "./utils/logger/file";
+
+migrator.migrateToLatest();
 
 const runtimeLogger = new FileLogger("runtime", { loglevel: process.env.IS_DEBUG === "true" ? 0 : 1 });
 
@@ -30,7 +33,7 @@ const unhanldedEvents: BaileysEventList[] = [
   "call",
   "chats.delete",
   "chats.phoneNumberShare",
-  // "chats.update",
+  "chats.update",
   "chats.upsert",
   // "contacts.update",
   "contacts.upsert", // Maybe this will only triggers when I save a new contact on WhatsApp
