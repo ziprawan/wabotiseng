@@ -530,41 +530,66 @@ client.addEventHandler("messaging-history.set", async (sock, event) => {
             .values({ creds_name: projectConfig.SESSION_NAME, remote_jid: jid, type: "Group" })
             .returning(["id", "remote_jid"])
             .onConflict((oc) => oc.columns(["remote_jid", "creds_name"]).doNothing())
-            .execute();
+            .executeTakeFirstOrThrow();
 
-          if (insertedEntities.length === 0) {
-            throw new Error("Nothing to do huh?");
-          }
-
-          await trx
+          const insertedGroup = await trx
             .insertInto("group")
-            .values(
-              insertedEntities.map(({ id, remote_jid }) => {
-                return {
-                  entity_id: id,
-                  remote_jid,
-                  creds_name: projectConfig.SESSION_NAME,
-                  owner: metadata.owner ?? "",
-                  subject: metadata.subject,
-                  subject_time: metadata.subjectTime ? new Date(metadata.subjectTime) : null,
-                  subject_owner: metadata.subjectOwner,
-                  desc: metadata.desc,
-                  desc_owner: metadata.descOwner,
-                  creation: metadata.creation ? new Date(metadata.creation) : null,
-                  announce: metadata.announce,
-                  restrict: metadata.restrict,
-                  join_approval_mode: metadata.joinApprovalMode,
-                  linked_parent: metadata.linkedParent,
-                  member_add_mode: metadata.memberAddMode,
-                  size: metadata.size,
-                  is_community: metadata.isCommunity,
-                  is_community_announce: metadata.isCommunityAnnounce,
-                  ephemeral_duration: metadata.ephemeralDuration,
-                  invite_code: metadata.inviteCode,
-                };
+            .values({
+              entity_id: insertedEntities.id,
+              remote_jid: insertedEntities.remote_jid,
+              creds_name: projectConfig.SESSION_NAME,
+              owner: metadata.owner ?? "",
+              subject: metadata.subject,
+              subject_time: metadata.subjectTime ? new Date(metadata.subjectTime) : null,
+              subject_owner: metadata.subjectOwner,
+              desc: metadata.desc,
+              desc_owner: metadata.descOwner,
+              creation: metadata.creation ? new Date(metadata.creation) : null,
+              announce: metadata.announce,
+              restrict: metadata.restrict,
+              join_approval_mode: metadata.joinApprovalMode,
+              linked_parent: metadata.linkedParent,
+              member_add_mode: metadata.memberAddMode,
+              size: metadata.size,
+              is_community: metadata.isCommunity,
+              is_community_announce: metadata.isCommunityAnnounce,
+              ephemeral_duration: metadata.ephemeralDuration,
+              invite_code: metadata.inviteCode,
+            })
+            .onConflict((oc) =>
+              oc.columns(["entity_id"]).doUpdateSet({
+                owner: metadata.owner ?? "",
+                subject: metadata.subject,
+                subject_time: metadata.subjectTime ? new Date(metadata.subjectTime) : null,
+                subject_owner: metadata.subjectOwner,
+                desc: metadata.desc,
+                desc_owner: metadata.descOwner,
+                creation: metadata.creation ? new Date(metadata.creation) : null,
+                announce: metadata.announce,
+                restrict: metadata.restrict,
+                join_approval_mode: metadata.joinApprovalMode,
+                linked_parent: metadata.linkedParent,
+                member_add_mode: metadata.memberAddMode,
+                size: metadata.size,
+                is_community: metadata.isCommunity,
+                is_community_announce: metadata.isCommunityAnnounce,
+                ephemeral_duration: metadata.ephemeralDuration,
+                invite_code: metadata.inviteCode,
               })
             )
-            .onConflict((oc) => oc.columns(["entity_id"]).doNothing())
+            .returning(["id"])
+            .executeTakeFirstOrThrow();
+
+          await trx
+            .insertInto("participant")
+            .values(
+              metadata.participants.map((p) => ({
+                group_id: insertedGroup.id,
+                participant_jid: p.id,
+                role: participantRoleToEnum(p.admin),
+              }))
+            )
+            .onConflict((oc) => oc.columns(["group_id", "participant_jid"]).doNothing())
             .execute();
         });
       } catch {
