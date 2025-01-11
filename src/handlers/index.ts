@@ -13,8 +13,8 @@ import { edunexHandler } from "./edunex";
 import { snipeHandler } from "./snipe/snipe";
 import { stickerCommandHandler } from "./sticker/create";
 import { taggedHandler } from "./titles/tagged";
-import { viewOnceAcceptHandler } from "./viewonce/accepted";
 import { viewOnceCommandHandler } from "./viewonce/view";
+import { viewOnceAcceptHandler } from "./viewonce/accepted";
 
 export async function mainHandler(sock: WASocket, msg: Messages) {
   if (msg.msgKey.fromMe) return; // Don't process message if its from me
@@ -24,7 +24,7 @@ export async function mainHandler(sock: WASocket, msg: Messages) {
   const args = parser.args();
   const ctx = { sock, msg, parser };
 
-  await taggedHandler(ctx);
+  if (!msg.msgKey.fromMe) await taggedHandler(ctx);
 
   if (command === "ping") {
     await sock.sendMessage(msg.chat, { text: "Pong!" });
@@ -86,9 +86,4 @@ export async function mainHandler(sock: WASocket, msg: Messages) {
     await viewOnceAcceptHandler(ctx);
     await deleteReactionhandler(ctx);
   }
-
-  // if (command === "asdfghjkl" && msg.from === projectConfig.OWNER) {
-  //   const res = await edunexCourseListCronJob(new FileLogger("edunex-test"), msg.sessionName, sock);
-  //   await msg.replyText(res, true);
-  // }
 }

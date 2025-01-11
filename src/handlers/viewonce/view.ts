@@ -18,7 +18,7 @@ export const viewOnceCommandHandler: CommandHandlerFunc = async ({ sock, msg }) 
 
   if (!viewOnceMessage && msg.reply_to_message.viewOnceMessage) {
     await msg.reply_to_message.saveMessage({ dismissChat: true });
-    viewOnceMessage = msg.reply_to_message;
+    viewOnceMessage = msg.reply_to_message.viewOnceMessage;
   }
 
   if (!viewOnceMessage) {
@@ -40,7 +40,7 @@ export const viewOnceCommandHandler: CommandHandlerFunc = async ({ sock, msg }) 
     let retries: number = 10;
     let lastError: string = "";
 
-    while (retries > 10) {
+    while (retries > 0) {
       try {
         const mediaUrl = mediaMessage.url;
         const mediaKey = getMediaKeys(mediaMessage.mediaKey, mediaType);
@@ -63,9 +63,7 @@ export const viewOnceCommandHandler: CommandHandlerFunc = async ({ sock, msg }) 
         );
       } catch (err) {
         retries--;
-        if (retries <= 0) {
-          lastError = (err as Error).stack ?? "Unknown.";
-        }
+        lastError = (err as Error).stack ?? "Unknown.";
         continue;
       }
     }
@@ -76,10 +74,10 @@ export const viewOnceCommandHandler: CommandHandlerFunc = async ({ sock, msg }) 
   const request = await postgresDb
     .selectFrom("request_view_once as rvo")
     .select(["accepted", "requested_by"])
-    .innerJoin("group as g", "g.id", "rvo.entity_id")
+    .innerJoin("entity as e", "e.id", "rvo.entity_id")
     .where("rvo.message_id", "=", resolvedReply.id ?? "")
-    .where("g.remote_jid", "=", resolvedReply.remoteJid ?? "")
-    .where("g.creds_name", "=", msg.sessionName)
+    .where("e.remote_jid", "=", resolvedReply.remoteJid ?? "")
+    .where("e.creds_name", "=", msg.sessionName)
     .executeTakeFirst();
 
   if (request) {
@@ -111,18 +109,24 @@ export const viewOnceCommandHandler: CommandHandlerFunc = async ({ sock, msg }) 
     { quoted: msg.raw }
   );
 
-  await postgresDb
-    .insertInto("request_view_once")
-    .values(({ selectFrom }) => ({
-      message_id: resolvedReply.id ?? "",
-      confirm_id: sent?.key.id ?? "",
-      entity_id: selectFrom("group as g")
-        .select("g.id")
-        .where("g.creds_name", "=", msg.sessionName)
-        .where("g.remote_jid", "=", resolvedReply.remoteJid ?? ""),
-      requested_by: msg.from,
-    }))
-    .onConflict((oc) => oc.columns(["confirm_id", "entity_id"]).doNothing())
-    .onConflict((oc) => oc.columns(["message_id", "entity_id"]).doNothing())
-    .execute();
+  try {
+    await postgresDb
+      .insertInto("request_view_once")
+      .values(({ selectFrom }) => ({
+        message_id: resolvedReply.id ?? "",
+        confirm_id: sent?.key.id ?? "",
+        entity_id: selectFrom("entity as e")
+          .select("e.id")
+          .where("e.creds_name", "=", msg.sessionName)
+          .where("e.remote_jid", "=", resolvedReply.remoteJid ?? ""),
+        requested_by: msg.from,
+      }))
+      .onConflict((oc) => oc.columns(["confirm_id", "entity_id"]).doNothing())
+      .onConflict((oc) => oc.columns(["message_id", "entity_id"]).doNothing())
+      .execute();
+  } catch (err) {
+    return await msg.replyText(
+      `Something went wrong while inserting request into database! Additional info:\n\n${(err as Error).stack}`
+    );
+  }
 };

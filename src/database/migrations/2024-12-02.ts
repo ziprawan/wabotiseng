@@ -1,6 +1,5 @@
 /// Reference: https://sqlocal.dallashoffman.com/kysely/migrations
 import { sql, type Migration } from "kysely";
-import { values } from "../utils";
 
 /**
  * ### Summary

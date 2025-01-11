@@ -24,10 +24,10 @@ export const viewOnceAcceptHandler: CommandHandlerFunc = async ({ sock, msg }) =
   const request = await postgresDb
     .selectFrom("request_view_once as rvo")
     .select(["rvo.message_id", "rvo.accepted", "rvo.id"])
-    .innerJoin("group as g", "g.id", "rvo.entity_id")
+    .innerJoin("entity as e", "e.id", "rvo.entity_id")
     .where("rvo.confirm_id", "=", resolvedReactMsg.id ?? "")
-    .where("g.remote_jid", "=", msg.chat)
-    .where("g.creds_name", "=", msg.sessionName)
+    .where("e.remote_jid", "=", msg.chat)
+    .where("e.creds_name", "=", msg.sessionName)
     .executeTakeFirst();
 
   if (!request) {
@@ -43,6 +43,7 @@ export const viewOnceAcceptHandler: CommandHandlerFunc = async ({ sock, msg }) =
 
   const mediaMessage = viewOnceMessage.audio ?? viewOnceMessage.video ?? viewOnceMessage.image ?? undefined;
   if (!mediaMessage) {
+    await msg.replyText(JSON.stringify(viewOnceMessage));
     return await sock.sendMessage(msg.chat, { text: "Unable to determine media type!" }, { quoted: msg.raw });
   }
 
@@ -75,7 +76,7 @@ export const viewOnceAcceptHandler: CommandHandlerFunc = async ({ sock, msg }) =
         },
         { quoted: msg.raw }
       );
-      await postgresDb
+      return await postgresDb
         .updateTable("request_view_once as rvo")
         .where("rvo.id", "=", request.id)
         .set({ accepted: true })

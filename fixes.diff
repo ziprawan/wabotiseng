@@ -1,0 +1,225 @@
+diff --git a/src/handlers/delete/request.ts b/src/handlers/delete/request.ts
+index bb8fa50..948d818 100644
+--- a/src/handlers/delete/request.ts
++++ b/src/handlers/delete/request.ts
+@@ -6,19 +6,21 @@ import { jidNormalizedUser } from "@whiskeysockets/baileys";
+ export const MINIMUM_ACCEPTS = 5;
+ 
+ export const deleteHandler: CommandHandlerFunc = async (ctx) => {
+-  const { sock, msg } = ctx;
++  try{const { sock, msg } = ctx;
+ 
+-  const metadata = await msg.saveChatToDatabase(true);
++  if (msg.chatType !== "group") return await msg.replyText("Please use it only in group!");
+ 
+-  if (!metadata || typeof metadata === "string") {
+-    return await sock.sendMessage(msg.chat, { text: "Please use it only in group!" });
+-  }
++  // const metadata = await msg.saveChatToDatabase(true);
++
++  // if (!metadata || typeof metadata === "string") {
++  //   return await sock.sendMessage(msg.chat, { text: "Please use it only in group!" });
++  // }
+ 
+   const meId = jidNormalizedUser(msg.client.socket?.user?.id ?? "");
+ 
+-  if (metadata.participants.filter((p) => p.id === meId && p.admin !== null).length === 0) {
+-    return await sock.sendMessage(msg.chat, { text: "I am not an admin in this group!" });
+-  }
++  // if (metadata.participants.filter((p) => p.id === meId && p.admin !== null).length === 0) {
++  //   return await sock.sendMessage(msg.chat, { text: "I am not an admin in this group!" });
++  // }
+ 
+   if (!msg.reply_to_message) {
+     return await msg.replyText("Please reply to a message that you want to delete!", true);
+@@ -37,16 +39,16 @@ export const deleteHandler: CommandHandlerFunc = async (ctx) => {
+     .where("rdm.message_id", "=", resolvedReply.id ?? "")
+     .where("g.remote_jid", "=", resolvedReply.chat)
+     .where("g.creds_name", "=", msg.sessionName)
+-    .executeTakeFirst();
++    .execute();
+ 
+-  if (request) {
+-    const requestedBy = request.requested_by;
++  if (request.length > 0) {
++    const requestedBy = request[0].requested_by;
+     const requestedNumber = requestedBy.split("@")[0];
+ 
+     return await sock.sendMessage(
+       msg.chat,
+       {
+-        text: request.done
++        text: request[0].done
+           ? `That message already deleted`
+           : `That message deletion already requested by @${requestedNumber}`,
+         mentions: [requestedBy],
+@@ -78,5 +80,5 @@ export const deleteHandler: CommandHandlerFunc = async (ctx) => {
+       requested_by: msg.from,
+       confirm_id: confirmMsg.id ?? "",
+     }))
+-    .execute();
++    .execute();}catch(err){await ctx.msg.replyText((err as Error).stack ?? "Unknown error.")}
+ };
+diff --git a/src/handlers/index.ts b/src/handlers/index.ts
+index e47497d..81dc3d9 100644
+--- a/src/handlers/index.ts
++++ b/src/handlers/index.ts
+@@ -17,14 +17,14 @@ import { viewOnceAcceptHandler } from "./viewonce/accepted";
+ import { viewOnceCommandHandler } from "./viewonce/view";
+ 
+ export async function mainHandler(sock: WASocket, msg: Messages) {
+-  if (msg.msgKey.fromMe) return; // Don't process message if its from me
++  // if (msg.msgKey.fromMe) return; // Don't process message if its from me
+ 
+   const parser = new Parser([".", "/"], msg.text);
+   const command = parser.command();
+   const args = parser.args();
+   const ctx = { sock, msg, parser };
+ 
+-  await taggedHandler(ctx);
++  if (!msg.msgKey.fromMe) await taggedHandler(ctx);
+ 
+   if (command === "ping") {
+     await sock.sendMessage(msg.chat, { text: "Pong!" });
+diff --git a/src/handlers/viewonce/accepted.ts b/src/handlers/viewonce/accepted.ts
+index 17bbb0a..fcf9afe 100644
+--- a/src/handlers/viewonce/accepted.ts
++++ b/src/handlers/viewonce/accepted.ts
+@@ -2,7 +2,7 @@ import { postgresDb } from "@/database/client";
+ import { CommandHandlerFunc } from "@/types/command/handler";
+ import { Messages } from "@/utils/classes/message";
+ import { streamToBuffer } from "@/utils/stream/toBuffer";
+-import { downloadEncryptedContent, getMediaKeys } from "@whiskeysockets/baileys";
++import { BufferJSON, downloadEncryptedContent, getMediaKeys } from "@whiskeysockets/baileys";
+ 
+ export const viewOnceAcceptHandler: CommandHandlerFunc = async ({ sock, msg }) => {
+   if (!msg.reaction) return;
+@@ -24,10 +24,10 @@ export const viewOnceAcceptHandler: CommandHandlerFunc = async ({ sock, msg }) =
+   const request = await postgresDb
+     .selectFrom("request_view_once as rvo")
+     .select(["rvo.message_id", "rvo.accepted", "rvo.id"])
+-    .innerJoin("group as g", "g.id", "rvo.entity_id")
++    .innerJoin("entity as e", "e.id", "rvo.entity_id")
+     .where("rvo.confirm_id", "=", resolvedReactMsg.id ?? "")
+-    .where("g.remote_jid", "=", msg.chat)
+-    .where("g.creds_name", "=", msg.sessionName)
++    .where("e.remote_jid", "=", msg.chat)
++    .where("e.creds_name", "=", msg.sessionName)
+     .executeTakeFirst();
+ 
+   if (!request) {
+@@ -43,6 +43,7 @@ export const viewOnceAcceptHandler: CommandHandlerFunc = async ({ sock, msg }) =
+ 
+   const mediaMessage = viewOnceMessage.audio ?? viewOnceMessage.video ?? viewOnceMessage.image ?? undefined;
+   if (!mediaMessage) {
++    await msg.replyText(JSON.stringify(viewOnceMessage));
+     return await sock.sendMessage(msg.chat, { text: "Unable to determine media type!" }, { quoted: msg.raw });
+   }
+ 
+@@ -75,7 +76,7 @@ export const viewOnceAcceptHandler: CommandHandlerFunc = async ({ sock, msg }) =
+         },
+         { quoted: msg.raw }
+       );
+-      await postgresDb
++      return await postgresDb
+         .updateTable("request_view_once as rvo")
+         .where("rvo.id", "=", request.id)
+         .set({ accepted: true })
+diff --git a/src/handlers/viewonce/view.ts b/src/handlers/viewonce/view.ts
+index 9db201d..3b4a85f 100644
+--- a/src/handlers/viewonce/view.ts
++++ b/src/handlers/viewonce/view.ts
+@@ -1,7 +1,7 @@
+ import { postgresDb } from "@/database/client";
+ import { CommandHandlerFunc } from "@/types/command/handler";
+ import { streamToBuffer } from "@/utils/stream/toBuffer";
+-import { downloadEncryptedContent, getMediaKeys } from "@whiskeysockets/baileys";
++import { BufferJSON, downloadEncryptedContent, getMediaKeys } from "@whiskeysockets/baileys";
+ 
+ export const viewOnceCommandHandler: CommandHandlerFunc = async ({ sock, msg }) => {
+   if (!msg.reply_to_message) {
+@@ -18,7 +18,7 @@ export const viewOnceCommandHandler: CommandHandlerFunc = async ({ sock, msg })
+ 
+   if (!viewOnceMessage && msg.reply_to_message.viewOnceMessage) {
+     await msg.reply_to_message.saveMessage({ dismissChat: true });
+-    viewOnceMessage = msg.reply_to_message;
++    viewOnceMessage = msg.reply_to_message.viewOnceMessage;
+   }
+ 
+   if (!viewOnceMessage) {
+@@ -29,6 +29,8 @@ export const viewOnceCommandHandler: CommandHandlerFunc = async ({ sock, msg })
+     );
+   }
+ 
++  // await msg.replyText(JSON.stringify(viewOnceMessage.raw, BufferJSON.replacer, 2));
++
+   const mediaMessage = viewOnceMessage.audio ?? viewOnceMessage.video ?? viewOnceMessage.image ?? undefined;
+   if (!mediaMessage) {
+     return await sock.sendMessage(msg.chat, { text: "Unable to determine media type!" }, { quoted: msg.raw });
+@@ -40,7 +42,7 @@ export const viewOnceCommandHandler: CommandHandlerFunc = async ({ sock, msg })
+     let retries: number = 10;
+     let lastError: string = "";
+ 
+-    while (retries > 10) {
++    while (retries > 0) {
+       try {
+         const mediaUrl = mediaMessage.url;
+         const mediaKey = getMediaKeys(mediaMessage.mediaKey, mediaType);
+@@ -62,24 +64,23 @@ export const viewOnceCommandHandler: CommandHandlerFunc = async ({ sock, msg })
+           { quoted: msg.raw }
+         );
+       } catch (err) {
++        return await msg.replyText((err as Error).stack ?? "Unknown error.", true);
+         retries--;
+-        if (retries <= 0) {
+-          lastError = (err as Error).stack ?? "Unknown.";
+-        }
++        lastError = (err as Error).stack ?? "Unknown.";
+         continue;
+       }
+     }
+ 
+-    return await msg.replyText("Gagal mengunduh media! Keterangan:\n\n" + lastError, true);
++    return await msg.replyText("[Gotcha!] Gagal mengunduh media! Keterangan:\n\n" + lastError, true);
+   }
+ 
+   const request = await postgresDb
+     .selectFrom("request_view_once as rvo")
+     .select(["accepted", "requested_by"])
+-    .innerJoin("group as g", "g.id", "rvo.entity_id")
++    .innerJoin("entity as e", "e.id", "rvo.entity_id")
+     .where("rvo.message_id", "=", resolvedReply.id ?? "")
+-    .where("g.remote_jid", "=", resolvedReply.remoteJid ?? "")
+-    .where("g.creds_name", "=", msg.sessionName)
++    .where("e.remote_jid", "=", resolvedReply.remoteJid ?? "")
++    .where("e.creds_name", "=", msg.sessionName)
+     .executeTakeFirst();
+ 
+   if (request) {
+@@ -111,18 +112,20 @@ export const viewOnceCommandHandler: CommandHandlerFunc = async ({ sock, msg })
+     { quoted: msg.raw }
+   );
+ 
+-  await postgresDb
++  // await msg.replyText(`Confirm ID: ${sent?.key.id}\nMesage ID: ${resolvedReply.id}`);
++
++  try{await postgresDb
+     .insertInto("request_view_once")
+     .values(({ selectFrom }) => ({
+       message_id: resolvedReply.id ?? "",
+       confirm_id: sent?.key.id ?? "",
+-      entity_id: selectFrom("group as g")
+-        .select("g.id")
+-        .where("g.creds_name", "=", msg.sessionName)
+-        .where("g.remote_jid", "=", resolvedReply.remoteJid ?? ""),
++      entity_id: selectFrom("entity as e")
++        .select("e.id")
++        .where("e.creds_name", "=", msg.sessionName)
++        .where("e.remote_jid", "=", resolvedReply.remoteJid ?? ""),
+       requested_by: msg.from,
+     }))
+     .onConflict((oc) => oc.columns(["confirm_id", "entity_id"]).doNothing())
+     .onConflict((oc) => oc.columns(["message_id", "entity_id"]).doNothing())
+-    .execute();
++    .execute();}catch(err){return await msg.replyText(`Something went wrong while inserting request into database! Additional info:\n\n${(err as Error).stack}`)}
+ };
