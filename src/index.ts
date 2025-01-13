@@ -624,8 +624,6 @@ if (process.env.IS_DEBUG === "true") {
   });
 }
 
-// client.addCron("edunex", "* */10 * * * *", edunexCourseListCronJob);
-
 // Test
 client.on("close", () => {
   runtimeLogger.verbose("App closed!");
