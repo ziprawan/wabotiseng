@@ -1,5 +1,7 @@
 import { readEnvironmentVariables } from "@/utils/env";
 
+export const BLACKLISTED_TITLES = ["all", "admin", "superadmin"];
+
 export const projectConfig = readEnvironmentVariables<{
   DATABASE_URL: string;
   SESSION_NAME: string;

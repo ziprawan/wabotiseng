@@ -1,6 +1,7 @@
 import TitlesAdminCreate from "#web/pages/user/titles/create";
 import { AuthContextVariables } from "#web/types/authVariables";
 import { TitlesContextVariables } from "#web/types/titlesVariables";
+import { BLACKLISTED_TITLES } from "@/config";
 import { postgresDb } from "@/database/client";
 import { Hono } from "hono";
 import { z } from "zod";
@@ -58,6 +59,11 @@ titlesAdminRouter
     }
 
     const { titleName } = zodResult.data;
+
+    if (BLACKLISTED_TITLES.includes(titleName.toLocaleLowerCase())) {
+      url.searchParams.set("failReason", "titleTaken");
+      return c.redirect(url);
+    }
 
     const executed = await postgresDb
       .insertInto("title")
