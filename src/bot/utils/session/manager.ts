@@ -202,7 +202,11 @@ export const useDatabaseAuthState = async (
           .execute();
         break;
       case "creds":
-        await postgresDb.updateTable("cred").where("session_name", "=", sessionName).set({ logged_out: true }).execute();
+        await postgresDb
+          .updateTable("cred")
+          .where("session_name", "=", sessionName)
+          .set({ logged_out: true, session_string: "{}" })
+          .execute();
         await postgresDb.deleteFrom("pre_key").where("creds_name", "=", sessionName).execute();
         await postgresDb.deleteFrom("session").where("creds_name", "=", sessionName).execute();
         await postgresDb.deleteFrom("sender_key").where("creds_name", "=", sessionName).execute();
