@@ -73,7 +73,7 @@ export const useDatabaseAuthState = async (
         await postgresDb
           .insertInto("cred")
           .values({ session_name: sessionName, session_string: content })
-          .onConflict((oc) => oc.constraint("cred_pk").doUpdateSet({ session_string: content }))
+          .onConflict((oc) => oc.constraint("cred_pk").doUpdateSet({ session_string: content, logged_out: false }))
           .execute();
         break;
       default:
@@ -153,6 +153,7 @@ export const useDatabaseAuthState = async (
               .selectFrom("cred")
               .select(["session_string"])
               .where("session_name", "=", sessionName)
+              .where("logged_out", "=", false)
               .executeTakeFirst()
           )?.session_string;
           break;
@@ -201,7 +202,13 @@ export const useDatabaseAuthState = async (
           .execute();
         break;
       case "creds":
-        await postgresDb.deleteFrom("cred").where("session_name", "=", sessionName).execute();
+        await postgresDb.updateTable("cred").where("session_name", "=", sessionName).set({ logged_out: true }).execute();
+        await postgresDb.deleteFrom("pre_key").where("creds_name", "=", sessionName).execute();
+        await postgresDb.deleteFrom("session").where("creds_name", "=", sessionName).execute();
+        await postgresDb.deleteFrom("sender_key").where("creds_name", "=", sessionName).execute();
+        await postgresDb.deleteFrom("sender_key_memory").where("creds_name", "=", sessionName).execute();
+        await postgresDb.deleteFrom("app_state_sync_key").where("creds_name", "=", sessionName).execute();
+        await postgresDb.deleteFrom("app_state_sync_version").where("creds_name", "=", sessionName).execute();
         break;
       default:
         throw new TypeError(`Invalid data type "${type}"`);

@@ -25,6 +25,7 @@ export type ParticipantRole = "ADMIN" | "MEMBER" | "SUPERADMIN";
 export interface Cred {
   session_name: string;
   session_string: string;
+  logged_out: Generated<boolean>;
 }
 
 export interface AppStateSyncKey {

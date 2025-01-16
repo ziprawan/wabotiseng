@@ -215,7 +215,7 @@ export class Client extends EventEmitter {
 
     this.runtimeLogger.verbose(`Adding all ${this.#crons.size} cron jobs`);
     this.#crons.forEach((value) => {
-      const fileLogger = new FileLogger(value.name);
+      const fileLogger = new FileLogger(value.name, { loglevel: process.env.IS_DEBUG === "true" ? 0 : 1 });
       CronJob.from({
         cronTime: value.cronTime,
         onTick: async () => {
