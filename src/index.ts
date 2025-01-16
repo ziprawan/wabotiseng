@@ -6,10 +6,10 @@ import { botClient, runtimeLogger } from "./bot";
 import { isLiterallyNumeric } from "./utils/generics/isNumeric";
 import { webServer } from "./web";
 
-// botClient.launch().catch((err) => {
-//   runtimeLogger.error("Client launcher errored! Additional info:");
-//   runtimeLogger.error((err as Error).stack ?? "Unknown.");
-// });
+botClient.launch().catch((err) => {
+  runtimeLogger.error("Client launcher errored! Additional info:");
+  runtimeLogger.error((err as Error).stack ?? "Unknown.");
+});
 
 showRoutes(webServer, { verbose: true });
 
