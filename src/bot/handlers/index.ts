@@ -79,7 +79,7 @@ export async function mainHandler(sock: WASocket, msg: Messages) {
   }
 
   if (command === "help") {
-    await msg.replyText(`Get some help :3\n\nhttps://ajos.my.id:8443/opc_docs/`, true);
+    await msg.replyText(`Get some help :3\n\nhttps://ajos.my.id:8443/docs/`, true);
   }
 
   if (msg.reaction) {
