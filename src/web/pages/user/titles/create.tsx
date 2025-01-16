@@ -3,10 +3,8 @@ import { GroupInfo } from "#web/types/titles";
 
 export default function TitlesAdminCreate({
   groupInfo: g,
-  url: u,
   failReason: fr,
 }: {
-  url: string;
   failReason: string | undefined;
   groupInfo: GroupInfo;
 }) {
@@ -50,7 +48,7 @@ export default function TitlesAdminCreate({
             {g.me.role}
           </b>
         </div>
-        <form class={"flex flex-col gap-2 w-fit"} action={u} method="post">
+        <form class={"flex flex-col gap-2 w-fit"} action={"create"} method="post">
           <input
             name="titleName"
             class={"bg-[#130f17] text-white border border-white px-4 py-2 rounded-sm"}

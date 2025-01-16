@@ -31,7 +31,7 @@ titlesAdminRouter
     const groupInfo = c.get("groupInfo");
     if (!groupInfo) return c.text("500 Internal Server Error", 500);
 
-    return c.html(<TitlesAdminCreate groupInfo={groupInfo} url={c.req.url} failReason={c.req.query("failReason")} />);
+    return c.html(<TitlesAdminCreate groupInfo={groupInfo} failReason={c.req.query("failReason")} />);
   })
   .post(async (c) => {
     const groupInfo = c.get("groupInfo");
