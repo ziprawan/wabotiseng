@@ -1,5 +1,5 @@
 // @ts-ignore
-import tailwindConfig from "@/../../tailwind.config";
+import tailwindConfig from "@/../tailwind.config";
 
 export default function Layout({
   title,
