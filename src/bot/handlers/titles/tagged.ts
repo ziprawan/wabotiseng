@@ -78,8 +78,7 @@ export const taggedHandler: CommandHandlerFunc = async ({ msg, parser, sock }) =
   const mentions = [...new Set([...mentionsAddons])];
   foundTitles.push(...taggedAddons.map((ta) => ({ id: "-1", title_name: ta })));
 
-  console.log(mentions);
-  console.log(foundTitles);
+  if (foundTitles.length === 0 || mentions.length === 0) return;
 
   return await sock.sendMessage(
     msg.chat,
