@@ -50,7 +50,7 @@ export const useDatabaseAuthState = async (
           .insertInto("sender_key_memory")
           .values({ content, name, creds_name: sessionName })
           .onConflict((oc) => oc.constraint("sender_key_memory_pk").doUpdateSet({ content }))
-          .onConflict((oc) => oc.constraint("sender_key_memory_cred_and_name").doUpdateSet({ content }))
+          .onConflict((oc) => oc.constraint("sender_key_memory_creds_and_name").doUpdateSet({ content }))
           .execute();
         break;
       case "app-state-sync-key":

@@ -8,7 +8,8 @@ export const taggedHandler: CommandHandlerFunc = async ({ msg, parser, sock }) =
   const tagged = parser.tagged();
 
   if (tagged.length === 0) return;
-  const addons: string[] = [];
+  const mentionsAddons: string[] = [];
+  const taggedAddons: string[] = [];
 
   if (tagged.includes("all")) {
     const all = await postgresDb
@@ -19,7 +20,8 @@ export const taggedHandler: CommandHandlerFunc = async ({ msg, parser, sock }) =
       .where("g.remote_jid", "=", msg.chat)
       .execute();
 
-    addons.push(...all.map((a) => a.participant_jid));
+    mentionsAddons.push(...all.map((a) => a.participant_jid));
+    taggedAddons.push("all");
   }
 
   if (tagged.includes("admin")) {
@@ -32,7 +34,8 @@ export const taggedHandler: CommandHandlerFunc = async ({ msg, parser, sock }) =
       .where("p.role", "!=", "MEMBER")
       .execute();
 
-    addons.push(...admins.map((a) => a.participant_jid));
+    mentionsAddons.push(...admins.map((a) => a.participant_jid));
+    taggedAddons.push("admin");
   }
 
   if (tagged.includes("superadmin")) {
@@ -45,7 +48,8 @@ export const taggedHandler: CommandHandlerFunc = async ({ msg, parser, sock }) =
       .where("p.role", "=", "SUPERADMIN")
       .execute();
 
-    addons.push(...superadmins.map((s) => s.participant_jid));
+    mentionsAddons.push(...superadmins.map((s) => s.participant_jid));
+    taggedAddons.push("superadmin");
   }
 
   const foundTitles = await postgresDb
@@ -56,19 +60,26 @@ export const taggedHandler: CommandHandlerFunc = async ({ msg, parser, sock }) =
     .where("t.title_name", "in", tagged)
     .execute();
 
-  const taggedParticipants = await postgresDb
-    .selectFrom("title_holder as th")
-    .innerJoin("participant as p", "p.id", "th.participant_id")
-    .select(["p.participant_jid"])
-    .where(
-      "th.title_id",
-      "in",
-      foundTitles.map((f) => f.id)
-    )
-    .groupBy(["p.participant_jid"])
-    .execute();
+  if (foundTitles.length > 0) {
+    const taggedParticipants = await postgresDb
+      .selectFrom("title_holder as th")
+      .innerJoin("participant as p", "p.id", "th.participant_id")
+      .select(["p.participant_jid"])
+      .where(
+        "th.title_id",
+        "in",
+        foundTitles.map((f) => f.id)
+      )
+      .groupBy(["p.participant_jid"])
+      .execute();
+    mentionsAddons.push(...taggedParticipants.map((tp) => tp.participant_jid));
+  }
 
-  const mentions = [...new Set([...taggedParticipants.map((t) => t.participant_jid), ...addons])];
+  const mentions = [...new Set([...mentionsAddons])];
+  foundTitles.push(...taggedAddons.map((ta) => ({ id: "-1", title_name: ta })));
+
+  console.log(mentions);
+  console.log(foundTitles);
 
   return await sock.sendMessage(
     msg.chat,

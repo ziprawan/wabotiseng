@@ -15,6 +15,7 @@ import { stickerCommandHandler } from "./sticker/create";
 import { taggedHandler } from "./titles/tagged";
 import { viewOnceCommandHandler } from "./viewonce/view";
 import { viewOnceAcceptHandler } from "./viewonce/accepted";
+import { titleListHandler } from "./titles/list";
 
 export async function mainHandler(sock: WASocket, msg: Messages) {
   if (msg.msgKey.fromMe) return; // Don't process message if its from me
@@ -79,7 +80,11 @@ export async function mainHandler(sock: WASocket, msg: Messages) {
   }
 
   if (command === "help") {
-    await msg.replyText(`Get some help :3\n\nhttps://ajos.my.id:8443/docs/`, true);
+    await msg.replyText(`Get some help :3\n\n${projectConfig.WEB_BASE}/docs/`, true);
+  }
+
+  if (command === "titles") {
+    await titleListHandler(ctx);
   }
 
   if (msg.reaction) {
