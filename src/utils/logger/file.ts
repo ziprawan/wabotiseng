@@ -7,15 +7,22 @@ import * as fs from "fs";
 // 3 for error
 // 4 for none
 
-export class FileLogger {
-  constructor(
-    private name: string,
-    private options: { folder?: string; loglevel?: 0 | 1 | 2 | 3 | 4 } = { folder: "logs", loglevel: 2 }
-  ) {}
+type LogLevel = 0 | 1 | 2 | 3 | 4;
 
-  private stream = fs.createWriteStream(`${this.options?.folder ?? "logs"}/${Date.now()}-${this.name}.log`, { flags: "w" });
-  private logs: string[] = [];
-  private loglevel = this.options.loglevel ?? 2;
+export class FileLogger {
+  name: string;
+  options: { folder?: string; loglevel?: LogLevel } = { folder: "logs", loglevel: 2 };
+  stream: fs.WriteStream;
+  logs: string[];
+  loglevel: LogLevel;
+
+  constructor(name: string, options: { folder?: string; loglevel?: 0 | 1 | 2 | 3 | 4 }) {
+    this.name = name;
+    this.options = options;
+    this.stream = fs.createWriteStream(`${this.options?.folder ?? "logs"}/${Date.now()}-${this.name}.log`, { flags: "w" });
+    this.logs = [];
+    this.loglevel = this.options.loglevel ?? 2;
+  }
 
   _write(message: string) {
     this.stream.write(message + "\n");

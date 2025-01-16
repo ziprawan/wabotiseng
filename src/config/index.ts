@@ -5,4 +5,5 @@ export const projectConfig = readEnvironmentVariables<{
   SESSION_NAME: string;
   OWNER: string;
   CONFESS_TARGET: string;
-}>(["CONFESS_TARGET", "DATABASE_URL", "OWNER", "SESSION_NAME"]);
+  JWT_SECRET: string;
+}>(["CONFESS_TARGET", "DATABASE_URL", "OWNER", "SESSION_NAME", "JWT_SECRET"]);

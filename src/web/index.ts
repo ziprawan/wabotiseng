@@ -1,16 +1,13 @@
 import { Hono } from "hono";
-import { serveStatic } from "@hono/node-server/serve-static";
+import { authMiddleware } from "./middlewares/authMiddleware";
+import { slashMiddleware } from "./middlewares/slashMiddleware";
+import { routes } from "./routes";
 
 const app = new Hono();
-app.use("/docs", async (c) => {
-  return c.redirect("/docs/", 301);
-});
-app.use(
-  "/docs/*",
-  serveStatic({
-    root: "./",
-    rewriteRequestPath: (path) => path.replace(/^\/docs/, "/docs/build/html/"),
-  })
-);
+
+app.use("*", authMiddleware);
+app.use("*", slashMiddleware);
+
+routes(app);
 
 export { app as webServer };
