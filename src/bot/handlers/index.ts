@@ -16,6 +16,7 @@ import { taggedHandler } from "./titles/tagged";
 import { viewOnceCommandHandler } from "./viewonce/view";
 import { viewOnceAcceptHandler } from "./viewonce/accepted";
 import { titleListHandler } from "./titles/list";
+import { loginHandler } from "./login/req";
 
 export async function mainHandler(sock: WASocket, msg: Messages) {
   if (msg.msgKey.fromMe) return; // Don't process message if its from me
@@ -85,6 +86,10 @@ export async function mainHandler(sock: WASocket, msg: Messages) {
 
   if (command === "titles") {
     await titleListHandler(ctx);
+  }
+
+  if (command === "login") {
+    await loginHandler(ctx);
   }
 
   if (msg.reaction) {

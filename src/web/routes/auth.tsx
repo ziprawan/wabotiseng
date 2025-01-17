@@ -2,7 +2,7 @@ import MainAuthPage from "#web/pages/auth";
 import AuthAlreadyLoggedIn from "#web/pages/auth/loggedIn";
 import { AuthContextVariables } from "#web/types/authVariables";
 import { sign } from "#web/utils/jwt";
-import { projectConfig } from "@/config";
+import { MAX_LOGIN_HOURS, projectConfig } from "@/config";
 import { postgresDb } from "@/database/client";
 import { randomizeCode } from "@/utils/generics/randomizeNumber";
 import { Hono } from "hono";
@@ -100,6 +100,41 @@ authRouter.all("/signin", async (c) => {
   setCookie(c, "auth", await sign({ jid: remoteJid }), { expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) });
 
   return c.redirect("/");
+});
+
+authRouter.all("/onetaplogin", async (c) => {
+  const token = c.req.query("token");
+
+  if (!token) return c.text('400 "token" not found in your URL query!', 400);
+
+  const foundToken = await postgresDb
+    .selectFrom("contact as c")
+    .where("c.creds_name", "=", projectConfig.SESSION_NAME)
+    .where("c.login_request_id", "=", token)
+    .select(["c.remote_jid", "c.login_request_date"])
+    .execute();
+
+  if (foundToken.length === 0) {
+    return c.text("403 Invalid token", 403);
+  } else if (foundToken.length !== 1) {
+    return c.text("500 Internal Server Error", 500);
+  } else {
+    const now = Date.now();
+    const found = foundToken[0];
+    const reqDate = found.login_request_date;
+
+    if (!reqDate) {
+      return c.text("500 Internal Server Error", 500);
+    }
+
+    if (now - reqDate.getTime() > MAX_LOGIN_HOURS * 60 * 60 * 1000) {
+      return c.text("401 Token expired", 401);
+    }
+
+    setCookie(c, "auth", await sign({ jid: found.remote_jid }), { expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) });
+
+    return c.redirect("/");
+  }
 });
 
 authRouter.get("/signout", (c) => {

@@ -8,11 +8,11 @@ import { type Migration } from "kysely";
  * ### Detail
  *
  * Adding column "logged_out" to cred table that indicates
- * iss the client logged out or nah. The reason behind this
+ * that the client logged out or nah. The reason behind this
  * is the relationship between cred and entity. If I keep
  * using delete cred row, it will delete the related entities
  * too, which is could cause deletion of unwated data too such
- * as titlez, request_view_once, etc. The Session class will
+ * as titles request_view_once, etc. The Session class will
  * be implemented using this migration.
  *
  * This column has type boolean with default value "false",
@@ -23,7 +23,7 @@ export const Migration20250116: Migration = {
   async up(db) {
     await db.schema
       .alterTable("cred")
-      .addColumn("logged_out", "boolean", (ac) => ac.defaultTo(false))
+      .addColumn("logged_out", "boolean", (ac) => ac.defaultTo(false).notNull())
       .execute();
   },
   async down(db) {

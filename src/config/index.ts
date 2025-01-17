@@ -1,6 +1,7 @@
 import { readEnvironmentVariables } from "@/utils/env";
 
 export const BLACKLISTED_TITLES = ["all", "admin", "superadmin"];
+export const MAX_LOGIN_HOURS = 1;
 
 export const projectConfig = readEnvironmentVariables<{
   DATABASE_URL: string;

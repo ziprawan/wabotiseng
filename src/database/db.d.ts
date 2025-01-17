@@ -89,6 +89,8 @@ export interface Contact {
   saved_name: string;
   server_name: string;
   signin_code: string;
+  login_request_id: string | null;
+  login_request_date: Timestamp | null;
 }
 
 export interface Group {
