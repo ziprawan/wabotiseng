@@ -2,7 +2,7 @@
 import "module-alias/register";
 
 import { Client } from "#bot/client";
-import { mainHandler } from "#bot/handlers";
+import { mainHandler } from "#bot/handlers/messagesUpsert";
 import { BufferJSON, Contact } from "@whiskeysockets/baileys";
 import { sql } from "kysely";
 import { projectConfig } from "../config";
