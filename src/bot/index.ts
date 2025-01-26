@@ -15,6 +15,7 @@ import { sleep } from "../utils/sleep";
 import { BaileysEventList } from "./types/events";
 import { Messages } from "./utils/classes/message";
 import { participantRoleToEnum } from "./utils/enum/participant_role";
+import { groupParticipantsUpdateHandler } from "./handlers/groupParticipantsUpdate";
 
 const runtimeLogger = new FileLogger("runtime", { loglevel: process.env.IS_DEBUG === "true" ? 0 : 1 });
 
@@ -238,78 +239,7 @@ client.addEventHandler("group-participants.update", async (sock, event) => {
     return;
   }
 
-  if (event.participants.length === 0) {
-    return runtimeLogger.warning(`event.participants length is 0! Ignoring`);
-  }
-
-  const groupJid = event.id;
-  const groupData = await postgresDb
-    .selectFrom("group as g")
-    .select(["id"])
-    .where("g.creds_name", "=", projectConfig.SESSION_NAME)
-    .where("g.remote_jid", "=", groupJid)
-    .executeTakeFirst();
-
-  if (!groupData) {
-    // groupData shouldn't be undefined
-    // Something is wrong with groups.upsert event handler
-    runtimeLogger.error(`Couldn't find group with jid ${groupJid}! Please check for groups.upsert related logs`);
-    return;
-  }
-
-  switch (event.action) {
-    case "add": {
-      // Participant(s) added/invited to group
-      await postgresDb
-        .insertInto("participant")
-        .values(event.participants.map((participant_jid) => ({ group_id: groupData.id, participant_jid, role: "MEMBER" })))
-        .execute();
-
-      return;
-    }
-    case "remove": {
-      // Participant(s) removed from group
-      await postgresDb
-        .deleteFrom("participant as p")
-        .where("group_id", "=", groupData.id)
-        .where("participant_jid", "in", event.participants)
-        .execute();
-
-      return;
-    }
-    case "promote": {
-      // Participant(s) promoted into admin
-      await postgresDb
-        .updateTable("participant as p")
-        .where("group_id", "=", groupJid)
-        .where("participant_jid", "in", event.participants)
-        .set({ role: "ADMIN" }) // Please note that promoting will NEVER make participant as SUPERADMIN
-        .execute();
-
-      return;
-    }
-    case "demote": {
-      // Participant(s) demoted into very very ordinary member :D
-      await postgresDb
-        .updateTable("participant as p")
-        .where("group_id", "=", groupJid)
-        .where("participant_jid", "in", event.participants)
-        .set({ role: "MEMBER" }) // Please note that promoting will NEVER make participant as SUPERADMIN
-        .execute();
-
-      return;
-    }
-    default: {
-      await sock.sendMessage(projectConfig.OWNER, {
-        text: `Unhandled group-participants.update action type: "${event.action}". JSON Event:\n\n${JSON.stringify(
-          event,
-          BufferJSON.replacer,
-          2
-        )}`,
-      });
-      return;
-    }
-  }
+  return await groupParticipantsUpdateHandler(sock, event);
 });
 
 runtimeLogger.info("Adding groups.upsert event handler");
