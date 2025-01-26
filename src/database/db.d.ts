@@ -141,6 +141,12 @@ export interface Participant {
   role: ParticipantRole;
 }
 
+export interface GroupSettings {
+  group_id: Int8;
+  greeting_message: string | null;
+  leaving_message: string | null;
+}
+
 // Message
 
 export interface Message {
@@ -224,6 +230,7 @@ export interface DB {
   contact: Contact;
   group: Group;
   participant: Participant;
+  group_settings: GroupSettings;
   // Message and utils
   message: Message;
   request_view_once: RequestViewOnce;

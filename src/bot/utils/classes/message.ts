@@ -76,9 +76,11 @@ export class Messages {
       case "private":
         return this.remoteJid ?? "";
       case "group":
-        return this.msgKey.participant ?? "";
+        // To prevent empty string (smh, whatsapp shit)
+        return this.msgKey.participant ? this.msgKey.participant : this.raw.participant ? this.raw.participant : "";
       case "broadcast":
-        return this.msgKey.participant ?? "";
+        // To prevent empty string (smh, whatsapp shit)
+        return this.msgKey.participant ? this.msgKey.participant : this.raw.participant ? this.raw.participant : "";
       default:
         return "";
     }
@@ -726,6 +728,8 @@ export class Messages {
 
     const msg = this.raw.message?.protocolMessage;
 
+    if (this.raw.key?.remoteJid === this.client.socket?.user?.id) return true;
+
     if (msg && msg.type === proto.Message.ProtocolMessage.Type.REVOKE) {
       this.runtimeLogger.verbose("msg protocol type is REVOKE");
       this.client.caches[`delete-${this.remoteJid}-${msg.key?.id ?? ""}`] = true;
@@ -758,7 +762,7 @@ export class Messages {
 
         this.runtimeLogger.verbose("Inserting message to database");
         this.runtimeLogger.verbose(`Caches: ${JSON.stringify(this.client.caches)}`);
-        await postgresDb
+        const builder = postgresDb
           .insertInto("message")
           .values(({ selectFrom }) => ({
             entity_id: selectFrom("entity as e")
@@ -774,8 +778,9 @@ export class Messages {
               message: JSON.stringify(this.message),
               deleted: this.client.caches[`delete-${this.remoteJid}-${this.id}`] === true,
             })
-          )
-          .execute();
+          );
+        this.runtimeLogger.verbose(builder.compile().sql);
+        await builder.execute();
 
         if (this.client.caches[`delete-${this.remoteJid}-${this.id}`] === true) {
           delete this.client.caches[`delete-${this.remoteJid}-${this.id}`];

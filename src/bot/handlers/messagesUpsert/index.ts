@@ -17,6 +17,10 @@ import { viewOnceCommandHandler } from "./viewonce/view";
 import { viewOnceAcceptHandler } from "./viewonce/accepted";
 import { titleListHandler } from "./titles/list";
 import { loginHandler } from "./login/req";
+import { formatReplacer } from "#bot/utils/whatsapp/formatter/replacer";
+import { FormatterData } from "#bot/types/whatsapp/formatter";
+import { postgresDb } from "@/database/client";
+import { setWelcomeHandler } from "./groups/setwelcome";
 
 export async function mainHandler(sock: WASocket, msg: Messages) {
   if (msg.msgKey.fromMe) return; // Don't process message if its from me
@@ -27,6 +31,32 @@ export async function mainHandler(sock: WASocket, msg: Messages) {
   const ctx = { sock, msg, parser };
 
   if (!msg.msgKey.fromMe) await taggedHandler(ctx);
+
+  if (command === "formattester") {
+    // if (msg.from === projectConfig.OWNER) {
+    const groupData = await postgresDb
+      .selectFrom("group as g")
+      .where("g.creds_name", "=", projectConfig.SESSION_NAME)
+      .where("g.remote_jid", "=", msg.chat)
+      .select("subject")
+      .executeTakeFirst();
+    const [formatted, errors] = formatReplacer<FormatterData>(msg.text, {
+      groupid: msg.chat.split("@")[0],
+      groupsubject: groupData?.subject ?? "",
+      mention: ["@6282112981691"],
+      inviter: "@6282112981699",
+    });
+
+    return await sock.sendMessage(msg.chat, {
+      text: `RESULT:\n${formatted}\n\nERRORS:\n${errors.map((e, i) => `${i + 1}. ${e}`).join("\n")}`,
+      mentions: ["6282112981691@s.whatsapp.net", "6282112981699@s.whatsapp.net"],
+    });
+    // }
+  }
+
+  if (command === "setwelcome") {
+    await setWelcomeHandler(ctx);
+  }
 
   if (command === "ping") {
     await sock.sendMessage(msg.chat, { text: "Pong!" });

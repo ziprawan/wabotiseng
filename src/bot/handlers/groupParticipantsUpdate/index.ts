@@ -1,5 +1,7 @@
 import { runtimeLogger } from "#bot/index";
 import { EventHandlerFunc } from "#bot/types/events";
+import { FormatterData } from "#bot/types/whatsapp/formatter";
+import { formatReplacer } from "#bot/utils/whatsapp/formatter/replacer";
 import { projectConfig } from "@/config";
 import { postgresDb } from "@/database/client";
 import { BufferJSON } from "@whiskeysockets/baileys";
@@ -13,10 +15,13 @@ export const groupParticipantsUpdateHandler: EventHandlerFunc<"group-participant
   const groupJid = event.id;
   const groupData = await postgresDb
     .selectFrom("group as g")
-    .select(["id", "subject"])
+    .leftJoin("group_settings as gs", "gs.group_id", "g.id")
+    .select(["g.id", "g.subject", "gs.greeting_message", "gs.leaving_message"])
     .where("g.creds_name", "=", projectConfig.SESSION_NAME)
     .where("g.remote_jid", "=", groupJid)
     .executeTakeFirst();
+
+  console.log(groupData);
 
   if (!groupData) {
     // groupData shouldn't be undefined
@@ -39,14 +44,37 @@ export const groupParticipantsUpdateHandler: EventHandlerFunc<"group-participant
 
       if (!new Set(event.participants).has(me)) {
         const peserta = event.participants.map((p) => "@" + p.split("@")[0]).join(" ");
-        const invitedBy = new Set(...event.participants).has(event.author)
-          ? ""
-          : `\nKamu sudah diundang oleh @${event.author.split("@")[0]}`;
+        if (!groupData.greeting_message) {
+          const invitedBy = new Set(...event.participants).has(event.author)
+            ? ""
+            : `\nYou are invited by @${event.author.split("@")[0]}`;
 
-        await sock.sendMessage(groupJid, {
-          text: `Halo halo! Selamat datang di grup "${groupData.subject}", ${peserta}${invitedBy}`,
-          mentions: [...new Set([...event.participants, event.author])],
-        });
+          return await sock.sendMessage(groupJid, {
+            text: `Hello! Welcome to group "${groupData.subject}", ${peserta}${invitedBy}`,
+            mentions: [...new Set([...event.participants, event.author])],
+          });
+        }
+
+        const data: FormatterData = {
+          groupid: groupJid.split("@")[0],
+          groupsubject: groupData.subject,
+          mention: peserta.split(" "),
+          inviter: event.author,
+        };
+
+        const formatted = formatReplacer(groupData.greeting_message, data);
+        const tmpMention: string[] = [];
+
+        if (formatted[2].has("mention")) {
+          tmpMention.push(...event.participants);
+        }
+        if (formatted[2].has("inviter")) {
+          tmpMention.push(event.author);
+        }
+
+        const mentions = [...new Set(tmpMention)];
+
+        return await sock.sendMessage(groupJid, { text: formatted[0], mentions });
       }
 
       return;
@@ -63,10 +91,10 @@ export const groupParticipantsUpdateHandler: EventHandlerFunc<"group-participant
         const peserta = event.participants.map((p) => "@" + p.split("@")[0]).join(" ");
         const kickedBy = new Set(...event.participants).has(event.author)
           ? ""
-          : `\n${event.participants.length > 1 ? "Mereka" : "Dia"} dikeluarkan oleh @${event.author.split("@")[0]}`;
+          : `\n${event.participants.length > 1 ? "They are" : "He is"} removed by @${event.author.split("@")[0]}`;
 
         await sock.sendMessage(groupJid, {
-          text: `Bye ${peserta}, jangan lupa balik lagi ya kalau kangen ~${kickedBy}`,
+          text: `Bye ${peserta}, don't forget to come back ~${kickedBy}`,
           mentions: [...new Set([...event.participants, event.author])],
         });
       }
