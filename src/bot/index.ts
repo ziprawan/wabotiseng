@@ -447,8 +447,8 @@ client.addEventHandler("messaging-history.set", async (sock, event) => {
 
     for (let i = 0; i < insertGroupJidsArr.length; i++) {
       const jid = insertGroupJidsArr[i];
-      runtimeLogger.verbose("Sleeping for 0.5 seconds");
-      await sleep(500);
+      // runtimeLogger.verbose("Sleeping for 0.5 seconds");
+      // await sleep(500);
       runtimeLogger.verbose("Querying metadata...");
       const metadata = await sock.groupMetadata(jid);
       runtimeLogger.verbose("Query complete! Inserting to database");
