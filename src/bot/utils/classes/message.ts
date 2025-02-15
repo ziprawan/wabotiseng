@@ -682,6 +682,12 @@ export class Messages {
     }
     this.runtimeLogger.verbose(`Got message id: ${id} and chat: ${chat}`);
 
+    if (force_save === true) {
+      await this.reply_to_message.saveMessage();
+
+      return this.reply_to_message;
+    }
+
     this.runtimeLogger.info("Getting message from database");
     const message = await postgresDb
       .selectFrom("message as m")

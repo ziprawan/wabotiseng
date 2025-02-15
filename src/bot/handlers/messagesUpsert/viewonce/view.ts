@@ -9,7 +9,7 @@ export const viewOnceCommandHandler: CommandHandlerFunc = async ({ sock, msg }) 
     return await msg.replyText("_Reply_ ke pesan sekali lihat untuk menggunakan perintah ini!", true);
   }
 
-  const resolvedReply = await msg.resolveReplyToMessage();
+  const resolvedReply = await msg.resolveReplyToMessage(true);
 
   if (!resolvedReply) {
     return await sock.sendMessage(msg.chat, { text: "Message not found." }, { quoted: msg.raw });
