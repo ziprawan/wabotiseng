@@ -3,6 +3,7 @@ import { CommandHandlerFunc } from "#bot/types/command/handler";
 import { Messages } from "#bot/utils/classes/message";
 import { streamToBuffer } from "@/utils/stream/toBuffer";
 import { downloadEncryptedContent, getMediaKeys } from "@whiskeysockets/baileys";
+import { Audio, Image, Video } from "#bot/types/whatsapp";
 
 export const viewOnceAcceptHandler: CommandHandlerFunc = async ({ sock, msg }) => {
   if (!msg.reaction) return;
@@ -34,20 +35,34 @@ export const viewOnceAcceptHandler: CommandHandlerFunc = async ({ sock, msg }) =
     return;
   }
 
-  const viewOnceMessage = (await Messages.getMessage(msg.client, msg.chat, request.message_id))?.viewOnceMessage;
+  const getMessage = await Messages.getMessage(msg.client, msg.chat, request.message_id);
+  let viewOnceMessage: Image | Video | Audio | undefined;
+  let mediaType: "audio" | "video" | "image" | undefined;
+  let caption: string | undefined = undefined;
+  let from = "";
+
+  if (getMessage?.viewOnceMessage) {
+    const tmpMsg = getMessage.viewOnceMessage;
+    viewOnceMessage = tmpMsg.audio ?? tmpMsg.video ?? tmpMsg.image;
+    mediaType = tmpMsg.audio ? "audio" : tmpMsg.video ? "video" : "image";
+    caption = tmpMsg.text;
+    from = tmpMsg.from;
+  } else if (getMessage?.audio?.isViewOnce || getMessage?.video?.isViewOnce || getMessage?.image?.isViewOnce) {
+    viewOnceMessage = getMessage?.audio ?? getMessage?.video ?? getMessage?.image;
+    mediaType = getMessage?.audio ? "audio" : getMessage?.video ? "video" : "image";
+    caption = getMessage?.text;
+    from = getMessage.from;
+  }
+
   if (!viewOnceMessage) {
-    return;
+    return await msg.replyText("Internal server error", true);
   }
 
-  if (msg.from !== viewOnceMessage.from) return;
-
-  const mediaMessage = viewOnceMessage.audio ?? viewOnceMessage.video ?? viewOnceMessage.image ?? undefined;
-  if (!mediaMessage) {
-    await msg.replyText(JSON.stringify(viewOnceMessage));
-    return await sock.sendMessage(msg.chat, { text: "Unable to determine media type!" }, { quoted: msg.raw });
+  if (!mediaType) {
+    return await msg.replyText("Gagal menentukan jenis media", true);
   }
 
-  const mediaType = viewOnceMessage.audio ? "audio" : viewOnceMessage.video ? "video" : "image";
+  if (msg.from !== from) return;
 
   if (request.accepted) return;
 
@@ -56,8 +71,8 @@ export const viewOnceAcceptHandler: CommandHandlerFunc = async ({ sock, msg }) =
 
   while (retries > 0) {
     try {
-      const mediaUrl = mediaMessage.url;
-      const mediaKey = getMediaKeys(mediaMessage.mediaKey, mediaType);
+      const mediaUrl = viewOnceMessage.url;
+      const mediaKey = getMediaKeys(viewOnceMessage.mediaKey, mediaType);
       const mediaBinary = await downloadEncryptedContent(mediaUrl, mediaKey);
       const mediaBuffer = await streamToBuffer(mediaBinary);
 
@@ -66,7 +81,7 @@ export const viewOnceAcceptHandler: CommandHandlerFunc = async ({ sock, msg }) =
       await sock.sendMessage(
         msg.chat,
         {
-          caption: viewOnceMessage.text ?? undefined,
+          caption: caption ?? undefined,
           ...(mediaType === "image"
             ? { image: mediaBuffer }
             : mediaType === "video"

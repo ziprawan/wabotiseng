@@ -1,40 +1,42 @@
-import { postgresDb } from "@/database/client";
 import { CommandHandlerFunc } from "#bot/types/command/handler";
+import { Audio, Image, Video } from "#bot/types/whatsapp";
+import { postgresDb } from "@/database/client";
 import { streamToBuffer } from "@/utils/stream/toBuffer";
 import { downloadEncryptedContent, getMediaKeys } from "@whiskeysockets/baileys";
 
 export const viewOnceCommandHandler: CommandHandlerFunc = async ({ sock, msg }) => {
   if (!msg.reply_to_message) {
-    return await msg.replyText("Please reply to a message that you want to view a view once message!", true);
+    return await msg.replyText("_Reply_ ke pesan sekali lihat untuk menggunakan perintah ini!", true);
   }
 
-  const resolvedReply = await msg.resolveReplyToMessage(true);
+  const resolvedReply = await msg.resolveReplyToMessage();
 
   if (!resolvedReply) {
     return await sock.sendMessage(msg.chat, { text: "Message not found." }, { quoted: msg.raw });
   }
 
-  let viewOnceMessage = resolvedReply.viewOnceMessage;
+  let viewOnceMessage: Image | Video | Audio | undefined;
+  let mediaType: "audio" | "video" | "image" | undefined;
+  let caption: string | undefined = undefined;
 
-  if (!viewOnceMessage && msg.reply_to_message.viewOnceMessage) {
-    await msg.reply_to_message.saveMessage({ dismissChat: true });
-    viewOnceMessage = msg.reply_to_message.viewOnceMessage;
+  if (resolvedReply.viewOnceMessage) {
+    const tmpMsg = resolvedReply.viewOnceMessage;
+    viewOnceMessage = tmpMsg.audio ?? tmpMsg.video ?? tmpMsg.image;
+    mediaType = tmpMsg.audio ? "audio" : tmpMsg.video ? "video" : "image";
+    caption = tmpMsg.text;
+  } else if (resolvedReply.audio?.isViewOnce || resolvedReply.video?.isViewOnce || resolvedReply.image?.isViewOnce) {
+    viewOnceMessage = resolvedReply.audio ?? resolvedReply.video ?? resolvedReply.image;
+    mediaType = resolvedReply.audio ? "audio" : resolvedReply.video ? "video" : "image";
+    caption = resolvedReply.text;
   }
 
   if (!viewOnceMessage) {
-    return await sock.sendMessage(
-      msg.chat,
-      { text: "The replied message is not a view once message!" },
-      { quoted: msg.raw }
-    );
+    return await msg.replyText("Pesan tersebut bukan pesan sekali lihat!", true);
   }
 
-  const mediaMessage = viewOnceMessage.audio ?? viewOnceMessage.video ?? viewOnceMessage.image ?? undefined;
-  if (!mediaMessage) {
-    return await sock.sendMessage(msg.chat, { text: "Unable to determine media type!" }, { quoted: msg.raw });
+  if (!mediaType) {
+    return await msg.replyText("Gagal menentukan jenis media", true);
   }
-
-  const mediaType = viewOnceMessage.audio ? "audio" : viewOnceMessage.video ? "video" : "image";
 
   if (resolvedReply.from === msg.from) {
     let retries: number = 10;
@@ -42,8 +44,8 @@ export const viewOnceCommandHandler: CommandHandlerFunc = async ({ sock, msg }) 
 
     while (retries > 0) {
       try {
-        const mediaUrl = mediaMessage.url;
-        const mediaKey = getMediaKeys(mediaMessage.mediaKey, mediaType);
+        const mediaUrl = viewOnceMessage.url;
+        const mediaKey = getMediaKeys(viewOnceMessage.mediaKey, mediaType);
         const mediaBinary = await downloadEncryptedContent(mediaUrl, mediaKey);
         const mediaBuffer = await streamToBuffer(mediaBinary);
 
@@ -52,7 +54,7 @@ export const viewOnceCommandHandler: CommandHandlerFunc = async ({ sock, msg }) 
         return await sock.sendMessage(
           msg.chat,
           {
-            caption: viewOnceMessage.text ?? undefined,
+            caption: caption ?? undefined,
             ...(mediaType === "image"
               ? { image: mediaBuffer }
               : mediaType === "video"
@@ -120,6 +122,7 @@ export const viewOnceCommandHandler: CommandHandlerFunc = async ({ sock, msg }) 
           .where("e.creds_name", "=", msg.sessionName)
           .where("e.remote_jid", "=", resolvedReply.remoteJid ?? ""),
         requested_by: msg.from,
+        accepted: false,
       }))
       .onConflict((oc) => oc.columns(["confirm_id", "entity_id"]).doNothing())
       .onConflict((oc) => oc.columns(["message_id", "entity_id"]).doNothing())
