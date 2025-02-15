@@ -7,7 +7,7 @@
     "run": "node out/index.js"
   },
   "devDependencies": {
-    "@types/bun": "^1.2.0",
+    "@types/bun": "^1.2.2",
     "@types/fluent-ffmpeg": "^2.1.27",
     "@types/pg": "^8.11.11",
     "futoin-hkdf": "^1.5.3",
@@ -22,20 +22,20 @@
     "typescript": "^5.7.3"
   },
   "dependencies": {
-    "@hono/node-server": "^1.13.7",
-    "@whiskeysockets/baileys": "^6.7.9",
+    "@hono/node-server": "^1.13.8",
+    "@whiskeysockets/baileys": "^6.7.12",
     "cron": "^3.5.0",
     "fluent-ffmpeg": "^2.1.3",
-    "hono": "^4.6.19",
+    "hono": "^4.7.1",
     "kysely": "^0.27.5",
     "libsignal": "^2.0.1",
     "node-cache": "^5.1.2",
     "node-emoji": "^2.2.0",
-    "pg": "^8.13.1",
+    "pg": "^8.13.3",
     "qrcode-terminal": "^0.12.0",
     "sharp": "^0.33.5",
     "wa-sticker-formatter": "^4.4.4",
-    "zod": "^3.24.1"
+    "zod": "^3.24.2"
   },
   "trustedDependencies": [
     "esbuild",
