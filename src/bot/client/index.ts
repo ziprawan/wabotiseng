@@ -2,20 +2,25 @@ import { DatabaseSession } from "#bot/types/client";
 import { CronFunc } from "#bot/types/cron";
 import { BaileysEventList, EventHandlerFunc, WSHandlerFunc } from "#bot/types/events";
 import { useDatabaseAuthState } from "#bot/utils/session/manager";
+import { postgresDb } from "@/database/client";
 import { FileLogger } from "@/utils/logger/file";
 import { sleep } from "@/utils/sleep";
 import { Boom } from "@hapi/boom";
 import makeWASocket, {
   BaileysEventMap,
   BinaryNode,
+  Browsers,
   ConnectionState,
   DisconnectReason,
+  proto,
   WASocket,
 } from "@whiskeysockets/baileys";
 import { CronJob } from "cron";
+import { jsonArrayFrom } from "kysely/helpers/postgres";
 import NodeCache from "node-cache";
 import { EventEmitter } from "node:events";
 import Pino from "pino";
+import { runtimeLogger } from "..";
 
 const Logger = Pino(
   {
@@ -202,6 +207,8 @@ export class Client extends EventEmitter {
    * @returns {Promise<void>}
    */
   async launch(): Promise<void> {
+    const client = this;
+
     this.runtimeLogger.verbose("src > client > Client > launch called!");
     this.runtimeLogger.verbose("Initializing database auth and WA Socket");
     this.session = await useDatabaseAuthState(this.sessionName);
@@ -211,6 +218,62 @@ export class Client extends EventEmitter {
       printQRInTerminal: true,
       generateHighQualityLinkPreview: true,
       msgRetryCounterCache,
+      browser: Browsers.windows("Edge"),
+      async cachedGroupMetadata(jid) {
+        const found = await postgresDb
+          .selectFrom("group as g")
+          .select((eb) => [
+            "g.remote_jid as id",
+            "g.owner",
+            "g.subject",
+            jsonArrayFrom(
+              eb
+                .selectFrom("participant as p")
+                .leftJoin("contact as c", (cb) =>
+                  cb.onRef("c.remote_jid", "=", "p.participant_jid").on("c.creds_name", "=", client.sessionName)
+                )
+                .select(["c.saved_name as name", "p.role", "p.participant_jid as id"])
+                .whereRef("p.group_id", "=", "g.id")
+            ).as("participants"),
+          ])
+          .where("g.remote_jid", "=", jid)
+          .where("g.creds_name", "=", client.sessionName)
+          .executeTakeFirst();
+
+        if (!found) return undefined;
+
+        return {
+          ...found,
+          participants: found.participants.map((p) => ({
+            name: p.name ?? "",
+            admin: p.role === "SUPERADMIN" ? "superadmin" : p.role === "ADMIN" ? "admin" : null,
+            id: p.id,
+          })),
+        };
+      },
+      async getMessage(key) {
+        const jid = key.remoteJid;
+        const msgId = key.id;
+
+        if (!jid || !msgId) {
+          client.runtimeLogger.warning(`Unknown jid and msgId from getMessage. Details: ${JSON.stringify(key)}`);
+
+          return;
+        }
+
+        const found = await postgresDb
+          .selectFrom("entity as e")
+          .innerJoin("message as m", "m.entity_id", "e.id")
+          .select("m.message")
+          .where("e.remote_jid", "=", jid)
+          .where("e.creds_name", "=", client.sessionName)
+          .where("m.id", "=", msgId)
+          .executeTakeFirst();
+
+        if (!found) return;
+
+        return proto.Message.fromObject(JSON.parse(found.message));
+      },
     });
 
     this.runtimeLogger.verbose(`Adding all ${this.#crons.size} cron jobs`);
@@ -242,6 +305,7 @@ export class Client extends EventEmitter {
         value.func(this.socket, arg).catch((err) => {
           this.runtimeLogger.error(`Event ${value.event} Handler errored! Additional info:`);
           this.runtimeLogger.error((err as Error).stack ?? "Unknown.");
+          this.setEventSuspendedState(false);
         });
       });
     });
