@@ -1,9 +1,9 @@
 import { pola_pikir } from "#bot/stickers";
 import { CommandHandlerFunc } from "#bot/types/command/handler";
 import { IStickerMetadata } from "#bot/types/whatsapp/sticker";
+import { createSticker } from "#bot/utils/whatsapp/stickers/createSticker";
 import { isLiterallyDecimal } from "@/utils/generics/isNumeric";
 import { streamToBuffer } from "@/utils/stream/toBuffer";
-import { createSticker } from "#bot/utils/whatsapp/stickers/createSticker";
 import { downloadEncryptedContent, getMediaKeys } from "@whiskeysockets/baileys";
 import ffmpeg from "fluent-ffmpeg";
 import * as Emoji from "node-emoji";
@@ -14,6 +14,10 @@ import { Categories } from "wa-sticker-formatter";
 export const stickerCommandHandler: CommandHandlerFunc = async ({ sock, msg, parser }) => {
   const imageMsg = msg.image ?? msg.reply_to_message?.image;
   const videoMsg = msg.video ?? msg.reply_to_message?.video;
+
+  if (videoMsg?.isViewOnce || imageMsg?.isViewOnce) {
+    return await msg.replyText("Pesan yang lu reply sekali liat 😡", true);
+  }
 
   const args = parser.args();
 
