@@ -99,7 +99,7 @@ export const viewOnceAcceptHandler: CommandHandlerFunc = async ({ sock, msg }) =
     } catch (err) {
       retries--;
       if (retries <= 0) {
-        lastError = (err as Error).stack ?? "Unknown.";
+        lastError = (err as Error).message ?? "Unknown.";
       }
       continue;
     }

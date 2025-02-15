@@ -103,7 +103,7 @@ export const stickerCommandHandler: CommandHandlerFunc = async ({ sock, msg, par
         });
       } catch (err) {
         retries--;
-        lastError = (err as Error).stack ?? "Unknown.";
+        lastError = (err as Error).message ?? "Unknown.";
         continue;
       }
     }
@@ -149,7 +149,7 @@ export const stickerCommandHandler: CommandHandlerFunc = async ({ sock, msg, par
 
       return await sock.sendMessage(msg.chat, { sticker: stickerWithMetadata }, { quoted: msg.raw }); // Send the sticker
     } catch (err) {
-      lastError = (err as Error).stack ?? "Unknown.";
+      lastError = (err as Error).message ?? "Unknown.";
       continue;
     }
   }

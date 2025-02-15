@@ -65,7 +65,7 @@ export const viewOnceCommandHandler: CommandHandlerFunc = async ({ sock, msg }) 
         );
       } catch (err) {
         retries--;
-        lastError = (err as Error).stack ?? "Unknown.";
+        lastError = (err as Error).message ?? "Unknown.";
         continue;
       }
     }
@@ -129,7 +129,7 @@ export const viewOnceCommandHandler: CommandHandlerFunc = async ({ sock, msg }) 
       .execute();
   } catch (err) {
     return await msg.replyText(
-      `Something went wrong while inserting request into database! Additional info:\n\n${(err as Error).stack}`
+      `Something went wrong while inserting request into database! Additional info:\n\n${(err as Error).message}`
     );
   }
 };

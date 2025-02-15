@@ -69,6 +69,6 @@ export const deleteHandler: CommandHandlerFunc = async (ctx) => {
       }))
       .execute();
   } catch (err) {
-    await ctx.msg.replyText((err as Error).stack ?? "Unknown error.");
+    await ctx.msg.replyText((err as Error).message ?? "Unknown error.");
   }
 };
