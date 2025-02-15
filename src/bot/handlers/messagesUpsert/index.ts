@@ -43,13 +43,13 @@ export async function mainHandler(sock: WASocket, msg: Messages) {
     const [formatted, errors] = formatReplacer<FormatterData>(msg.text, {
       groupid: msg.chat.split("@")[0],
       groupsubject: groupData?.subject ?? "",
-      mention: ["@6282112981691"],
-      inviter: "@6282112981699",
+      mention: ["@" + msg.from.split("@")[0]],
+      inviter: "@" + msg.from.split("@")[0],
     });
 
     return await sock.sendMessage(msg.chat, {
       text: `RESULT:\n${formatted}\n\nERRORS:\n${errors.map((e, i) => `${i + 1}. ${e}`).join("\n")}`,
-      mentions: ["6282112981691@s.whatsapp.net", "6282112981699@s.whatsapp.net"],
+      mentions: [msg.from],
     });
     // }
   }

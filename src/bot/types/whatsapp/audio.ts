@@ -4,4 +4,5 @@ export type Audio = {
   mimeType: string;
   duration: number;
   fileSize: number;
+  isViewOnce: boolean;
 };
