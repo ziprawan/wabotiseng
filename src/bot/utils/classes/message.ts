@@ -161,6 +161,7 @@ export class Messages {
       mimeType: aud.mimetype ?? "",
       duration: aud.seconds ?? -1,
       fileSize: parseInt(String(aud.fileLength ?? -1)),
+      isViewOnce: aud.viewOnce ?? false,
     };
   }
 
@@ -659,8 +660,9 @@ export class Messages {
   }
 
   /**
-   * Resolve the reply_to_message field from database
-   * @returns {Messages | null}
+   * Get message from database based on reply_to_message's id
+   * @param force_save What does this do actually?
+   * @returns
    */
   async resolveReplyToMessage(force_save: boolean = false): Promise<Messages | null> {
     this.runtimeLogger.verbose("src > utils > classes > message > Messages > resolveReplyToMessage called!");
@@ -724,6 +726,11 @@ export class Messages {
         );
         this.runtimeLogger.error((err as Error).stack ?? (err as Error).message);
       }
+    }
+
+    if (!this.raw.message) {
+      this.runtimeLogger.warning(`${this.msgKey.id} has no member "message". Maybe the message is not resolved`);
+      return false;
     }
 
     const msg = this.raw.message?.protocolMessage;

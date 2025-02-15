@@ -31,6 +31,12 @@ export function formatReplacer<T extends Record<string, string | string[]>>(
       if (c === "}") {
         usedVars.add(bracketContent);
         const content = data[bracketContent];
+
+        if (content === undefined) {
+            errors.push(`Cannot find variable ${bracketContent}`);
+            continue;
+        }
+
         bracketContent = "";
         bracketState = 0;
 
