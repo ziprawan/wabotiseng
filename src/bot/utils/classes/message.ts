@@ -743,7 +743,11 @@ export class Messages {
 
     if (this.raw.key?.remoteJid === this.client.socket?.user?.id) return true;
 
-    if (msg && msg.type === proto.Message.ProtocolMessage.Type.REVOKE) {
+    if (
+      msg &&
+      (msg.type === proto.Message.ProtocolMessage.Type.REVOKE ||
+        msg.type === ("REVOKE" as unknown as proto.Message.ProtocolMessage.Type))
+    ) {
       this.runtimeLogger.verbose("msg protocol type is REVOKE");
       this.client.caches[`delete-${this.remoteJid}-${msg.key?.id ?? ""}`] = true;
 
