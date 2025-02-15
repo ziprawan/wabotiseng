@@ -5,7 +5,7 @@ import { CommandHandlerFunc } from "#bot/types/command/handler";
 export const taggedHandler: CommandHandlerFunc = async ({ msg, parser, sock }) => {
   if (msg.chatType !== "group") return;
 
-  const tagged = parser.tagged();
+  const tagged = parser.tagged().map((t) => t.toLowerCase());
 
   if (tagged.length === 0) return;
   const mentionsAddons: string[] = [];
