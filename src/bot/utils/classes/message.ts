@@ -743,26 +743,29 @@ export class Messages {
 
     if (this.raw.key?.remoteJid === this.client.socket?.user?.id) return true;
 
-    if (
-      msg &&
-      (msg.type === proto.Message.ProtocolMessage.Type.REVOKE ||
-        msg.type === ("REVOKE" as unknown as proto.Message.ProtocolMessage.Type))
-    ) {
+    if (msg && (msg.type === proto.Message.ProtocolMessage.Type.REVOKE || (msg.type as any as string) === "REVOKE")) {
+      const msgId = msg.key?.id;
+
+      if (!msgId) {
+        this.runtimeLogger.warning("Unable to determine deleted message id!");
+        return false;
+      }
+
       this.runtimeLogger.verbose("msg protocol type is REVOKE");
-      this.client.caches[`delete-${this.remoteJid}-${msg.key?.id ?? ""}`] = true;
+      this.client.caches[`delete-${this.remoteJid}-${msgId}`] = true;
 
       try {
-        this.runtimeLogger.verbose("Updating message deleted state into true");
+        this.runtimeLogger.verbose(`Updating message ${msgId} deleted state into true`);
         await postgresDb
           .updateTable("message as m")
           .set({ deleted: true })
           .from("entity as e")
-          .where("m.message_id", "=", this.msgKey.id ?? "")
+          .where("m.message_id", "=", msgId)
           .where("e.remote_jid", "=", this.remoteJid === "status@broadcast" ? this.from : this.remoteJid ?? "")
           .where("e.creds_name", "=", this.sessionName)
           .executeTakeFirstOrThrow();
 
-        delete this.client.caches[`delete-${this.remoteJid}-${msg.key?.id ?? ""}`];
+        delete this.client.caches[`delete-${this.remoteJid}-${msgId}`];
       } catch (err) {
         this.runtimeLogger.error(
           "RUNTIME ERROR! Located at src > utils > classes > message > Messages > saveMessage > update deleted state"
