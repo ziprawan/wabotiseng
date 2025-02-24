@@ -74,7 +74,11 @@ export const confessHandler: CommandHandlerFunc = async ({ msg, parser, sock }) 
 
     const sentMsg = await sock.sendMessage(projectConfig.CONFESS_TARGET, sendMessageContent);
     if (sentMsg?.message?.stickerMessage) {
-      await sock.sendMessage(projectConfig.CONFESS_TARGET, { text: caption }, { quoted: sentMsg });
+      await sock.sendMessage(
+        projectConfig.CONFESS_TARGET,
+        { text: caption ? caption : "Chat! Ada konfes dari seseorang nih!" },
+        { quoted: sentMsg }
+      );
     }
   } catch {
     return await msg.replyText("Terjadi kesalahan saat mengirim pesan");
