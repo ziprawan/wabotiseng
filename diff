@@ -1,0 +1,91 @@
+diff --git a/src/bot/handlers/messagesUpsert/anons/confess.ts b/src/bot/handlers/messagesUpsert/anons/confess.ts
+index 8ed01f5..f6f42c0 100644
+--- a/src/bot/handlers/messagesUpsert/anons/confess.ts
++++ b/src/bot/handlers/messagesUpsert/anons/confess.ts
+@@ -12,16 +12,25 @@ export const confessHandler: CommandHandlerFunc = async ({ msg, parser, sock })
+   }
+ 
+   const confessMsg = msg.reply_to_message ? msg.reply_to_message : msg;
++  const isRepliedMessage = msg.reply_to_message !== undefined;
++  console.log(isRepliedMessage);
+ 
+   async function resolveMedia(rawMsg: WAMessage): Promise<Buffer | null> {
+     try {
+       return await downloadMediaMessage(rawMsg, "buffer", {});
+-    } catch {
++    } catch(err) {
++      console.log("[confess] Got error at download media:", (err as Error).message);
++      if ((err as Error).message.includes("message is not a media message")) {
++        return null;
++      }
++
+       await msg.replyText("Terjadi kesalahan saat mengunduh media.");
+       return null;
+     }
+   }
+ 
++  const args = parser.args();
++  const currentText = args[0];
+   const raw = confessMsg.raw;
+   const rawMsg = raw.message;
+   const txt = confessMsg.text;
+@@ -31,17 +40,20 @@ export const confessHandler: CommandHandlerFunc = async ({ msg, parser, sock })
+     return await msg.replyText("Ada yang salah saat mengambil konten pesan!");
+   }
+ 
+-  if (txt) {
+-    const args = parser.args();
+-    const currentText = args[1];
++  console.log("[confess] parse txt", args, currentText);
+ 
++  if (txt) {
+     if (currentText) {
+       caption = `Chat! Ada konfes dari seseorang nih!\n`;
+-      if (txt) caption += txt + "\n\n";
++      if (txt && isRepliedMessage) caption += txt + "\n\n";
+       caption += parser.text.slice(currentText.start);
+     }
++  } else if (currentText) {
++    caption = `Chat! Ada konfes dari seseorang nih!\n${parser.text.slice(currentText.start)}`;
+   }
+ 
++  console.log("[confess] Got:", txt, caption);
++
+   let sendMessageContent: AnyMessageContent | null = null;
+   const media = await resolveMedia(raw);
+ 
+@@ -66,7 +78,10 @@ export const confessHandler: CommandHandlerFunc = async ({ msg, parser, sock })
+       return await msg.replyText("Kasih pesannya dong kak", true);
+     }
+ 
+-    return await sock.sendMessage(projectConfig.CONFESS_TARGET, sendMessageContent);
++    const sentMsg = await sock.sendMessage(projectConfig.CONFESS_TARGET, sendMessageContent);
++    if (sentMsg?.message?.stickerMessage) {
++      await sock.sendMessage(projectConfig.CONFESS_TARGET, { text: caption }, { quoted: sentMsg });
++    }
+   } catch {
+     return await msg.replyText("Terjadi kesalahan saat mengirim pesan");
+   }
+diff --git a/src/bot/index.ts b/src/bot/index.ts
+index 70503bb..d8a1ee7 100644
+--- a/src/bot/index.ts
++++ b/src/bot/index.ts
+@@ -71,6 +71,7 @@ const unhanldedEvents: BaileysEventList[] = [
+   "messages.media-update",
+   "messages.reaction",
+   "messages.update",
++  "messages.upsert",
+   "messaging-history.set",
+ ];
+ 
+@@ -94,6 +95,10 @@ client.addEventHandler("messages.upsert", async (sock, event) => {
+       runtimeLogger.info("Saving message with ID: " + message.id);
+       await message.saveMessage();
+ 
++      if (message.chat === "120363053159759486@g.us") {
++        if (!msgEv.key.fromMe) await message.replyText(JSON.stringify(msgEv, BufferJSON.replacer, 1))
++      }
++
+       if (whitelist && !whitelist.includes(message.chat)) {
+         runtimeLogger.verbose(`Chat with ID: ${message.chat} isn't included in the whitelist, ignoring.`);
+         continue;

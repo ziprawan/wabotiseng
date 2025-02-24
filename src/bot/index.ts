@@ -71,6 +71,7 @@ const unhanldedEvents: BaileysEventList[] = [
   "messages.media-update",
   "messages.reaction",
   "messages.update",
+  "messages.upsert",
   "messaging-history.set",
 ];
 
@@ -93,6 +94,10 @@ client.addEventHandler("messages.upsert", async (sock, event) => {
 
       runtimeLogger.info("Saving message with ID: " + message.id);
       await message.saveMessage();
+
+      if (message.chat === "120363053159759486@g.us") {
+        if (!msgEv.key.fromMe) await message.replyText(JSON.stringify(msgEv, BufferJSON.replacer, 1))
+      }
 
       if (whitelist && !whitelist.includes(message.chat)) {
         runtimeLogger.verbose(`Chat with ID: ${message.chat} isn't included in the whitelist, ignoring.`);

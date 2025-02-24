@@ -12,16 +12,23 @@ export const confessHandler: CommandHandlerFunc = async ({ msg, parser, sock }) 
   }
 
   const confessMsg = msg.reply_to_message ? msg.reply_to_message : msg;
+  const isRepliedMessage = msg.reply_to_message !== undefined;
 
   async function resolveMedia(rawMsg: WAMessage): Promise<Buffer | null> {
     try {
       return await downloadMediaMessage(rawMsg, "buffer", {});
-    } catch {
+    } catch (err) {
+      if ((err as Error).message.includes("message is not a media message")) {
+        return null;
+      }
+
       await msg.replyText("Terjadi kesalahan saat mengunduh media.");
       return null;
     }
   }
 
+  const args = parser.args();
+  const currentText = args[0];
   const raw = confessMsg.raw;
   const rawMsg = raw.message;
   const txt = confessMsg.text;
@@ -32,14 +39,13 @@ export const confessHandler: CommandHandlerFunc = async ({ msg, parser, sock }) 
   }
 
   if (txt) {
-    const args = parser.args();
-    const currentText = args[1];
-
     if (currentText) {
       caption = `Chat! Ada konfes dari seseorang nih!\n`;
-      if (txt) caption += txt + "\n\n";
+      if (txt && isRepliedMessage) caption += txt + "\n\n";
       caption += parser.text.slice(currentText.start);
     }
+  } else if (currentText) {
+    caption = `Chat! Ada konfes dari seseorang nih!\n${parser.text.slice(currentText.start)}`;
   }
 
   let sendMessageContent: AnyMessageContent | null = null;
@@ -66,7 +72,10 @@ export const confessHandler: CommandHandlerFunc = async ({ msg, parser, sock }) 
       return await msg.replyText("Kasih pesannya dong kak", true);
     }
 
-    return await sock.sendMessage(projectConfig.CONFESS_TARGET, sendMessageContent);
+    const sentMsg = await sock.sendMessage(projectConfig.CONFESS_TARGET, sendMessageContent);
+    if (sentMsg?.message?.stickerMessage) {
+      await sock.sendMessage(projectConfig.CONFESS_TARGET, { text: caption }, { quoted: sentMsg });
+    }
   } catch {
     return await msg.replyText("Terjadi kesalahan saat mengirim pesan");
   }
